@@ -4,6 +4,7 @@
 apps/bridge/node_modules/
 node_modules/
 **/node_modules/
+node_modules/.pnpm
 .pnpm-store/
 **/.pnpm-store/
 .pnpm
@@ -88,7 +89,4 @@ build/
 *.tar
 *.tgz
 .DS_Store
-**/node_modules/
-**/.next/
-**/.vercel/
-.env.local
+**/.DS_Store
