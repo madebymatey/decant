@@ -1,0 +1,10 @@
+{
+  "name": "matey-api",
+  "private": true,
+  "packageManager": "pnpm@9.12.3",
+  "scripts": {
+    "dev": "pnpm -C apps/bridge dev",
+    "build": "pnpm -C apps/bridge build",
+    "start": "pnpm -C apps/bridge start"
+  }
+}
