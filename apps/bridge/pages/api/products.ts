@@ -1,12 +1,51 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { mapC7Product } from "../../lib/mapC7Product"
+import { isAllowedOrigin, verifyToken } from "../../lib/token"
+
+function getBearerToken(req: NextApiRequest): string | null {
+  const h = req.headers.authorization
+  if (!h) return null
+  const m = /^Bearer\s+(.+)$/i.exec(h)
+  return m?.[1] ?? null
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Optional: if you plan to fetch this from Framer directly in the browser
-  res.setHeader("Access-Control-Allow-Origin", "*")
-  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, tenant")
+  const origin = req.headers.origin
+
+  // CORS: allow only specific origins (Framer domains / your custom domain)
+  res.setHeader("Vary", "Origin")
+
+  if (origin && isAllowedOrigin(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin)
+    res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS")
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  } else if (origin) {
+    // If the request has an Origin header and it isn't allowlisted, block it.
+    return res.status(403).json({ error: "Forbidden origin", origin })
+  }
+
+  // Preflight
   if (req.method === "OPTIONS") return res.status(200).end()
+
+  // Require origin for browser-based access
+  if (!origin) {
+    return res.status(400).json({ error: "Missing Origin header" })
+  }
+
+  if (!isAllowedOrigin(origin)) {
+    return res.status(403).json({ error: "Forbidden origin", origin })
+  }
+
+  // Require Bearer token
+  const token = getBearerToken(req)
+  if (!token) {
+    return res.status(401).json({ error: "Missing bearer token" })
+  }
+
+  const v = verifyToken(token, origin)
+  if (!v.ok) {
+    return res.status(401).json({ error: "Invalid token", reason: v.reason })
+  }
 
   try {
     const baseUrl = process.env.C7_BASE_URL
