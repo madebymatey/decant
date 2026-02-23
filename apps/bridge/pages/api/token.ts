@@ -1,13 +1,20 @@
+// apps/bridge/pages/api/token.ts
+
 import type { NextApiRequest, NextApiResponse } from "next"
 import { isAllowedOrigin, issueToken } from "../../lib/token"
 
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
+type TokenApiResponse = { token: string; expiresIn: number }
+
+export default function handler(
+    req: NextApiRequest,
+    res: NextApiResponse<TokenApiResponse | any>
+) {
     const origin = req.headers.origin
 
-    // Always vary for caches/CDN
+    // Always vary by origin (important for caching/CDN)
     res.setHeader("Vary", "Origin")
 
-    // CORS + allowlist enforcement
+    // Enforce allowlist + set CORS
     if (origin) {
         if (!isAllowedOrigin(origin)) {
             return res.status(403).json({ error: "Forbidden origin", origin })
@@ -15,11 +22,13 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
         res.setHeader("Access-Control-Allow-Origin", origin)
         res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS")
-        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type")
     }
 
     // Preflight
-    if (req.method === "OPTIONS") return res.status(200).end()
+    if (req.method === "OPTIONS") {
+        return res.status(200).end()
+    }
 
     // Only POST allowed
     if (req.method !== "POST") {
@@ -32,7 +41,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
     try {
         const token = issueToken(origin)
-        return res.status(200).json({ token })
+        const expiresIn = Number(process.env.TOKEN_TTL_SECONDS ?? "300")
+        return res.status(200).json({ token, expiresIn })
     } catch (e: any) {
         return res.status(500).json({
             error: "Failed to issue token",

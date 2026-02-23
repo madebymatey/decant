@@ -30,7 +30,9 @@ function b64urlJson(obj: any) {
  * HMAC SHA256 signature
  */
 function sign(data: string, secret: string) {
-    return b64url(crypto.createHmac("sha256", secret).update(data).digest())
+    return b64url(
+        crypto.createHmac("sha256", secret).update(data).digest()
+    )
 }
 
 /**
@@ -89,6 +91,7 @@ export function verifyToken(token: string, origin: string) {
     ).toString("utf8")
 
     const payload = JSON.parse(payloadJson) as TokenPayload
+
     const now = Math.floor(Date.now() / 1000)
 
     if (payload.aud !== "framer") {
@@ -121,9 +124,12 @@ export function isAllowedOrigin(origin?: string) {
     if (allowed.includes(origin)) return true
 
     // Optional support for Framer editor/preview
-    const allowFramer = process.env.ALLOW_FRAMER_EDITOR_ORIGINS === "true"
+    const allowFramer =
+        process.env.ALLOW_FRAMER_EDITOR_ORIGINS === "true"
+
     if (allowFramer) {
         const o = origin.toLowerCase()
+
         if (o.endsWith(".framercanvas.com")) return true
         if (o.endsWith(".framer.app")) return true
         if (o === "https://framer.com") return true
