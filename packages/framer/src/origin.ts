@@ -43,6 +43,7 @@ export function isAllowedOrigin(
     const o = origin.toLowerCase()
     if (o.endsWith(".framercanvas.com")) return true
     if (o.endsWith(".framer.app")) return true
+    if (o.endsWith(".framer.website")) return true
     if (o === "https://framer.com") return true
     if (o === "https://www.framer.com") return true
   }
