@@ -23,9 +23,11 @@ export const WwProductSchema = z.object({
   state: z.string().nullable().optional(),
   region: z.string().nullable().optional(),
   vintage: z.union([z.string(), z.number()]).nullable().optional(),
-  // Int enum (RedWine, WhiteWine, Champagne, FortifiedWine, Other, Cider).
-  // TODO(withwine): confirm the int->name mapping before surfacing as wine.type.
-  wineType: z.number().nullable().optional(),
+  // Wine category. The live API returns this as a STRING name ("RedWine",
+  // "WhiteWine", …) on wines and an int (e.g. 0) on non-wines (gift cards), so
+  // accept both — declaring it number-only fails validation for every wine and
+  // blanks the whole product. Unused downstream for now (see mapper).
+  wineType: z.union([z.string(), z.number()]).nullable().optional(),
   productType: z.string().nullable().optional(),
   discount: z.number().nullable().optional(),
   isFreeShipping: z.boolean().optional(),

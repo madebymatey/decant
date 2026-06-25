@@ -86,6 +86,30 @@ describe("WithWineAdapter", () => {
     expect(p?.wine?.region).toBe("Napa Valley")
   })
 
+  it("maps wines whose wineType is a string name, not an int (regression)", async () => {
+    // Live WithWine data returns wineType as a string ("RedWine") on wines and
+    // an int on gift cards. If the schema rejects the string, the product fails
+    // validation and falls back to a blank { id:"", title:"" } — which then
+    // collapses every wine into one row on CMS sync (id-keyed dedupe).
+    const wine = { ...sampleProduct, id: 901, wineType: "RedWine" }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          text: () => Promise.resolve(JSON.stringify({ data: [wine] })),
+        } as Response)
+      )
+    )
+
+    const products = await new WithWineAdapter(config()).getProducts()
+    expect(products).toHaveLength(1)
+    expect(products[0]?.id).toBe("901") // not blanked
+    expect(products[0]?.title).toBe("Estate Cabernet Sauvignon")
+    expect(products[0]?.wine?.region).toBe("Napa Valley")
+  })
+
   it("calls /api/wine/Products with clientid auth + brand id", async () => {
     await new WithWineAdapter(config()).getProducts()
 
