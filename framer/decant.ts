@@ -172,7 +172,64 @@ export function addToCart(
   writeCart(items)
 }
 
-export function useCart() {
+/** Set an item's quantity; a quantity <= 0 removes the line. */
+export function setQuantity(id: string, quantity: number): void {
+  const items = readCart()
+  const item = items.find((i) => i.id === id)
+  if (!item) return
+  if (quantity <= 0) {
+    writeCart(items.filter((i) => i.id !== id))
+  } else {
+    item.quantity = quantity
+    writeCart(items)
+  }
+}
+
+/** Remove a line from the cart. */
+export function removeFromCart(id: string): void {
+  writeCart(readCart().filter((i) => i.id !== id))
+}
+
+export type CheckoutOptions = {
+  /** ISO country (e.g. "AU"). Optional — WithWine collects the address at checkout. */
+  country?: string
+  /** WithWine state id, for an optional shipping-estimate prefill. */
+  stateId?: string | number
+  /** Postcode, for an optional shipping-estimate prefill. */
+  postcode?: string
+}
+
+/**
+ * Hand the cart off to WithWine's hosted checkout. Asks the middleware to build
+ * the checkout URL (cart encoded as productIds/quantities) and redirects there.
+ * WithWine owns payment, tax, shipping and compliance, then returns the customer
+ * to /CheckoutSuccess?oid=<orderId>. No server-side cart is involved — the cart
+ * lives here (localStorage) until this hand-off.
+ */
+export async function checkout(
+  baseUrl: string,
+  opts: CheckoutOptions = {}
+): Promise<void> {
+  const items = readCart().map((i) => ({ id: i.id, quantity: i.quantity }))
+  if (items.length === 0) return
+  const token = await getToken(baseUrl)
+  const res = await fetch(`${trimSlash(baseUrl)}/api/checkout`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ items, ...opts }),
+  })
+  if (!res.ok) {
+    throw new Error(`checkout failed (${res.status}): ${await res.text()}`)
+  }
+  const { url } = (await res.json()) as { url: string }
+  window.location.href = url
+}
+
+/**
+ * Reactive cart hook. Pass `baseUrl` (the middleware origin) to enable
+ * `checkout()` — it needs that origin to build the WithWine hand-off URL.
+ */
+export function useCart(baseUrl?: string) {
   const [items, setItems] = useState<CartItem[]>([])
   useEffect(() => {
     const sync = () => setItems(readCart())
@@ -186,5 +243,14 @@ export function useCart() {
   }, [])
   const count = items.reduce((n, i) => n + i.quantity, 0)
   const total = items.reduce((s, i) => s + (i.price ?? 0) * i.quantity, 0)
-  return { items, count, total, addToCart, clear: () => writeCart([]) }
+  return {
+    items,
+    count,
+    total,
+    addToCart,
+    setQuantity,
+    removeFromCart,
+    clear: () => writeCart([]),
+    checkout: (opts?: CheckoutOptions) => checkout(baseUrl ?? "", opts),
+  }
 }
