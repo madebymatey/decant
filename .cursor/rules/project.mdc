@@ -1,0 +1,22 @@
+---
+description: Wine Platform Middleware — project structure and architectural rules
+globs: **/*
+---
+
+# Wine Platform Middleware
+
+TypeScript Turborepo: middleware connecting Commerce7, OrderPort, and WithWine to Framer storefronts.
+
+## Layout
+- `packages/core` — types, `defineConfig`, `PlatformAdapter`, errors (no platform code).
+- `packages/adapter-commerce7` / `packages/adapter-orderport` / `packages/adapter-withwine` — implement `PlatformAdapter`; depend only on `core`.
+- `packages/framer` — Framer origin/token/CORS access control + product serializer; depends only on `core`, framework-agnostic.
+- `apps/*` — thin Vercel consumers; config + API proxies only.
+
+## Rules
+- Config schema only in `packages/core/src/config.schema.ts`.
+- Adapters map platform responses to core types; throw `PlatformError` from core.
+- Framer-facing routes use `packages/framer` for security/serialization; don't re-implement per app.
+- New consumer apps: copy `apps/template-withwine` (Next.js — required by the WithWine SDK; works for other platforms too). No business logic in apps.
+
+See root `.cursorrules` for full detail.

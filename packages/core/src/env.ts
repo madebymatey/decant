@@ -1,1 +1,0 @@
-export const requireEnv = (n:string)=>process.env[n];

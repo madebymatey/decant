@@ -1,0 +1,85 @@
+# Wine Platform Middleware — Cursor Rules
+
+## Project Overview
+This is a TypeScript monorepo (Turborepo) that provides a shared middleware layer
+connecting wine commerce platforms (Commerce7, OrderPort, WithWine) to Framer-based
+storefronts. Consumer projects are thin, config-only Vercel deployments.
+
+## Monorepo Structure
+- packages/core        — shared types, interfaces, utilities, and the defineConfig() factory
+- packages/adapter-commerce7  — Commerce7-specific API adapter implementing core interfaces
+- packages/adapter-orderport  — OrderPort-specific API adapter implementing core interfaces
+- packages/adapter-withwine   — WithWine-specific API adapter implementing core interfaces
+- packages/framer      — Framer integration: origin/token/CORS access control + product serializer
+- apps/*               — consumer Vercel deployments (one per client, config-only)
+
+## Core Architectural Rules
+
+### Package Boundaries
+- packages/core has ZERO platform-specific code. No Commerce7/OrderPort/WithWine imports.
+- Each packages/adapter-* imports from packages/core only. Never from another adapter.
+- packages/framer imports from packages/core only (for the Product type). No platform/adapter
+  imports, and it stays framework-agnostic (no next/@vercel/node deps).
+- Consumer apps import the adapter that matches their platform + core for defineConfig()
+  + (optionally) framer for Framer access control and serialization.
+- No circular dependencies across any packages.
+
+### defineConfig() Pattern
+- Every consumer app configures via a Zod-validated defineConfig() exported from packages/core.
+- defineConfig() must validate at build time and throw descriptive errors on bad config.
+- Config schema lives in packages/core/src/config.schema.ts — never in adapters or apps.
+- Adapters receive a resolved, validated config object — they never call defineConfig() themselves.
+
+### Adapter Interface Contract
+- All adapters must implement the PlatformAdapter interface from packages/core.
+- Interface covers: getProducts(), getProduct(), createOrder(), getCart(), updateCart(),
+  getMember(), getClub(), getAvailability().
+- Adapters are responsible for mapping platform-native responses to core shared types.
+- Throw typed errors from packages/core — never raw Error objects or platform-specific errors.
+
+### TypeScript Rules
+- Strict mode on across all packages. No "any" types — use "unknown" and narrow.
+- All public API surfaces must have explicit return types.
+- Shared types live in packages/core/src/types/. Adapters never define their own public types.
+- Use Zod for all runtime validation (config, API responses from external platforms).
+
+### Build (tsup)
+- Each package builds independently via tsup.
+- Output: CommonJS + ESM dual build. Types emitted via tsc.
+- Entry point for each package: src/index.ts.
+- Do not bundle node_modules. Mark all cross-package deps as external.
+
+### Vercel / Consumer Apps
+- apps/* are config-only. No business logic lives in app directories.
+- Each app exports a config file (e.g., withwine.config.ts) calling defineConfig().
+- API routes in apps proxy through the adapter — they do not call platform APIs directly.
+- Environment variables follow the pattern: PLATFORM_API_KEY, PLATFORM_STORE_ID, etc.
+- Framer-facing routes use packages/framer for the origin allowlist + token gate + CORS;
+  do not re-implement that security per app.
+- WithWine consumers are full Next.js (Pages Router) apps — its auth SDK requires a Next.js
+  server. Use apps/template-withwine as the canonical template. Platforms without that
+  requirement can use the same template, or bare @vercel/node functions.
+
+### Distribution
+- Packages are published to GitHub Packages (@decant/core, etc.).
+- Consumer repos reference packages via package.json with exact versions.
+- Dependabot is configured on consumer repos to track package updates.
+
+### Error Handling
+- Define all error types in packages/core/src/errors.ts.
+- Errors must carry: code (string enum), message, platform (optional), httpStatus (optional).
+- Adapters catch platform-specific errors and rethrow as core typed errors.
+- API routes return consistent JSON error shapes — never expose raw platform error messages.
+
+### Naming Conventions
+- Files: kebab-case (product-adapter.ts, not productAdapter.ts).
+- Exported classes/interfaces: PascalCase.
+- Exported functions/constants: camelCase.
+- Zod schemas: suffixed with Schema (e.g., ConfigSchema, ProductSchema).
+- Types: prefixed with nothing — just the noun (Product, Order, Cart, Member).
+
+### Testing
+- Unit tests live alongside source files: product-adapter.test.ts next to product-adapter.ts.
+- Integration tests live in packages/adapter-*/tests/integration/.
+- Mock platform API responses in tests — never hit live APIs in test runs.
+- Use vitest across all packages.

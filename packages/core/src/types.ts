@@ -1,1 +1,0 @@
-export type NormalizedProduct = { id:string; title:string; price:number|null };

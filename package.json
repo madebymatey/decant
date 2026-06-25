@@ -4,8 +4,15 @@
   "private": true,
   "packageManager": "pnpm@9.12.3",
   "scripts": {
-    "dev": "pnpm -C apps/bridge dev",
-    "build": "pnpm -C apps/bridge build",
-    "start": "pnpm -C apps/bridge start"
+    "dev": "pnpm -C apps/template-withwine dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "withwine": "pnpm -C apps/template-withwine"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "5.9.3"
   }
 }

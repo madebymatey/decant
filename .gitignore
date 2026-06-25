@@ -1,7 +1,6 @@
 # =========================
 # Node / Package managers
 # =========================
-apps/bridge/node_modules/
 node_modules/
 **/node_modules/
 node_modules/.pnpm
@@ -83,6 +82,12 @@ build/
 .cache/
 
 # =========================
+# Turborepo
+# =========================
+.turbo/
+**/.turbo/
+
+# =========================
 # Misc
 # =========================
 *.zip
@@ -90,3 +95,4 @@ build/
 *.tgz
 .DS_Store
 **/.DS_Store
+.vercel
