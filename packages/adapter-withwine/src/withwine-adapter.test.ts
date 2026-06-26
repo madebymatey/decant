@@ -108,6 +108,24 @@ describe("WithWineAdapter", () => {
     expect(products[0]?.id).toBe("901") // not blanked
     expect(products[0]?.title).toBe("Estate Cabernet Sauvignon")
     expect(products[0]?.wine?.region).toBe("Napa Valley")
+    expect(products[0]?.wine?.type).toBe("Red") // humanized, "Wine" suffix dropped
+  })
+
+  it("ignores an int wineType (non-wine like a gift card) rather than surfacing it", async () => {
+    const giftCard = { ...sampleProduct, id: 902, wineType: 0, region: null, vintage: null }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          text: () => Promise.resolve(JSON.stringify({ data: [giftCard] })),
+        } as Response)
+      )
+    )
+
+    const products = await new WithWineAdapter(config()).getProducts()
+    expect(products[0]?.wine?.type ?? null).toBeNull() // int enum not surfaced
   })
 
   it("calls /api/wine/Products with clientid auth + brand id", async () => {
