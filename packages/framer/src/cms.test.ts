@@ -40,6 +40,7 @@ describe("toCmsRecord", () => {
         images: ["https://cdn/x.jpg", "https://cdn/y.jpg"],
         region: "Napa Valley",
         vintage: 2021,
+        wineType: "Red",
       })
     )
     expect(rec.slug).toBe("estate-cabernet")
@@ -48,6 +49,7 @@ describe("toCmsRecord", () => {
     expect(rec.image).toBe("https://cdn/x.jpg")
     expect(rec.region).toBe("Napa Valley")
     expect(rec.varietal).toBe("") // present, never undefined
+    expect(rec.wineType).toBe("Red") // surfaced for CMS filtering
     expect(Object.values(rec).every((v) => v !== undefined)).toBe(true)
   })
 })

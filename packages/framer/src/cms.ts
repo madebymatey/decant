@@ -19,6 +19,7 @@ export type CmsProductRecord = {
   image: string
   images: string[]
   category: string
+  wineType: string
   available: boolean
   vintage: number | null
   varietal: string
@@ -54,6 +55,7 @@ export function toCmsRecord(p: FramerProduct): CmsProductRecord {
     image: p.image ?? p.images[0] ?? "",
     images: p.images,
     category: p.category ?? "",
+    wineType: p.wineType ?? "",
     available: p.available,
     vintage: p.vintage,
     varietal: p.varietal ?? "",
