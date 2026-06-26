@@ -111,6 +111,23 @@ describe("WithWineAdapter", () => {
     expect(products[0]?.wine?.type).toBe("Red") // humanized, "Wine" suffix dropped
   })
 
+  it("maps varietyType to the varietal attribute", async () => {
+    const wine = { ...sampleProduct, id: 903, varietyType: "Shiraz" }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          text: () => Promise.resolve(JSON.stringify({ data: [wine] })),
+        } as Response)
+      )
+    )
+
+    const products = await new WithWineAdapter(config()).getProducts()
+    expect(products[0]?.wine?.varietal).toBe("Shiraz")
+  })
+
   it("ignores an int wineType (non-wine like a gift card) rather than surfacing it", async () => {
     const giftCard = { ...sampleProduct, id: 902, wineType: 0, region: null, vintage: null }
     vi.stubGlobal(

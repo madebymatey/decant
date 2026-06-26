@@ -28,6 +28,10 @@ export const WwProductSchema = z.object({
   // accept both — declaring it number-only fails validation for every wine and
   // blanks the whole product. Unused downstream for now (see mapper).
   wineType: z.union([z.string(), z.number()]).nullable().optional(),
+  // Grape variety. `varietyType` is the plain name ("Shiraz"); `varietyComposition`
+  // holds blend detail when present. (`variety` is a nested object we don't need.)
+  varietyType: z.string().nullable().optional(),
+  varietyComposition: z.string().nullable().optional(),
   productType: z.string().nullable().optional(),
   discount: z.number().nullable().optional(),
   isFreeShipping: z.boolean().optional(),

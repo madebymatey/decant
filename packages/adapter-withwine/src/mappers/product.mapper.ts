@@ -85,6 +85,7 @@ export const mapWwProductToProduct = (
   // category, so pass strings through and ignore the int enum (mapping unconfirmed).
   const wineType =
     typeof p.wineType === "string" && p.wineType ? humanizeWineType(p.wineType) : null
+  const varietal = p.varietyType || p.varietyComposition || null
 
   return {
     id: p.id,
@@ -96,8 +97,8 @@ export const mapWwProductToProduct = (
     images: image ? [image] : undefined,
     available: p.isSaleable,
     wine:
-      vintage !== null || region !== null || wineType !== null
-        ? { vintage, region, type: wineType }
+      vintage !== null || region !== null || wineType !== null || varietal !== null
+        ? { vintage, region, type: wineType, varietal }
         : undefined,
   }
 }
