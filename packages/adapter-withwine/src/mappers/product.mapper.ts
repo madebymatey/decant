@@ -59,6 +59,39 @@ const WINE_TYPE_LABELS: Record<string, string> = {
 const humanizeWineType = (raw: string): string =>
   WINE_TYPE_LABELS[raw] ?? raw.replace(/([a-z])([A-Z])/g, "$1 $2").trim()
 
+/**
+ * Every possible wine-type display label, deduped, in WithWine's list order.
+ * Use this to build a complete "all possible types" filter collection (including
+ * types no current product has).
+ */
+export const WINE_TYPE_OPTIONS: string[] = [
+  "Red",
+  "White",
+  "Sparkling",
+  "Fortified",
+  "Champagne",
+  "Dessert",
+  "Rosé",
+  "Non-Alcoholic",
+  "Orange",
+  "Piquette",
+  "Sweet",
+  "Cider",
+  "Beer",
+  "Whisky",
+  "Bourbon",
+  "Rum",
+  "Vodka",
+  "Gin",
+  "Tequila",
+  "Liqueurs",
+  "Brandy",
+  "Cognac",
+  "Pre-mixed Drinks",
+  "Other Spirits",
+  "Apéritif",
+]
+
 export const mapWwProductToProduct = (
   raw: unknown,
   opts: MapProductOptions

@@ -1,18 +1,22 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { parseBearerToken, slugify } from "@decant/framer"
+import { WINE_TYPE_OPTIONS } from "@decant/adapter-withwine"
 import { getCatalogProducts } from "../../../lib/catalog"
 import { sendPlatformError } from "../../../lib/respond"
 
 /**
- * GET /api/feed/wine-types -> flat JSON array of the UNIQUE wineType values
- * present in the catalog, for building a filter dropdown / a "Wine Types" CMS
- * collection in Framer.
+ * GET /api/feed/wine-types -> flat JSON array of wineType values for a "Wine
+ * Types" CMS collection / filter in Framer.
  *
- * Each record: { id, slug, name }. `id`/`slug` are stable (slug of the name),
- * `name` is the display label (e.g. "Red", "White", "Rosé"). Sorted A–Z.
+ * Each record: { id, slug, name, count }. `count` = how many catalog products
+ * have that type (so you can hide or grey out empty options).
  *
- * Same access model as /api/feed/products: public catalog data, optionally
- * gated by FEED_KEY (`?key=` or `Authorization: Bearer <key>`).
+ * Modes:
+ *   - default: only the types present in the catalog (count >= 1).
+ *   - ?all=true: the full WithWine taxonomy, including types with count 0.
+ *
+ * Sorted A–Z. Same access model as /api/feed/products: public catalog data,
+ * optionally gated by FEED_KEY (`?key=` or `Authorization: Bearer <key>`).
  */
 export default async function handler(
   req: NextApiRequest,
@@ -43,20 +47,32 @@ export default async function handler(
     }
   }
 
+  const all = req.query.all === "true" || req.query.all === "1"
+
   try {
     const products = await getCatalogProducts()
 
-    // Dedupe by slug; keep the first display label seen for each.
-    const bySlug = new Map<string, string>()
+    // Count products per type slug; remember a display label for each.
+    const count = new Map<string, number>()
+    const labelBySlug = new Map<string, string>()
     for (const p of products) {
       const name = p.wine?.type?.trim()
       if (!name) continue
       const slug = slugify(name)
-      if (slug && !bySlug.has(slug)) bySlug.set(slug, name)
+      if (!slug) continue
+      count.set(slug, (count.get(slug) ?? 0) + 1)
+      if (!labelBySlug.has(slug)) labelBySlug.set(slug, name)
     }
 
-    const records = [...bySlug.entries()]
-      .map(([slug, name]) => ({ id: slug, slug, name }))
+    // Base set of names: full taxonomy (all=true) or only those present.
+    const names = all ? WINE_TYPE_OPTIONS : [...labelBySlug.values()]
+    const seen = new Set<string>()
+    const records = names
+      .map((name) => {
+        const slug = slugify(name)
+        return { id: slug, slug, name: labelBySlug.get(slug) ?? name, count: count.get(slug) ?? 0 }
+      })
+      .filter((r) => (seen.has(r.slug) ? false : (seen.add(r.slug), true)))
       .sort((a, b) => a.name.localeCompare(b.name))
 
     res.status(200).json(records)
