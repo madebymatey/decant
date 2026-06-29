@@ -9,6 +9,7 @@ import { requireUser } from "@/lib/guards"
 import { getProjectById, getProjectBySlug, setSecret, type SecretName } from "@/lib/projects"
 import { executeSync, computeNextSync } from "@/lib/sync/run"
 import { isValidSlug, toSlug } from "@/lib/slug"
+import { isFramerProjectUrl, normalizeFramerProjectUrl } from "@/lib/framer-url"
 
 function str(form: FormData, key: string): string {
   return (form.get(key) ?? "").toString().trim()
@@ -35,6 +36,11 @@ export async function createProjectAction(
     return { error: `A project with slug "${slug}" already exists.` }
   }
 
+  const framerProjectUrl = normalizeFramerProjectUrl(str(form, "framerProjectUrl"))
+  if (framerProjectUrl && !isFramerProjectUrl(framerProjectUrl)) {
+    return { error: "Framer project URL must look like https://framer.com/projects/<Name>--<ID>." }
+  }
+
   const platformApiKey = str(form, "platformApiKey")
   const framerApiKey = str(form, "framerApiKey")
   const feedKey = str(form, "feedKey")
@@ -51,7 +57,7 @@ export async function createProjectAction(
       platformAssetUrl: str(form, "platformAssetUrl") || null,
       currency: str(form, "currency") || "USD",
       locale: str(form, "locale") || "en-US",
-      framerProjectUrl: str(form, "framerProjectUrl") || null,
+      framerProjectUrl: framerProjectUrl || null,
       createdBy: session.user.email ?? session.user.id,
     })
     .returning({ id: projects.id })
@@ -75,6 +81,11 @@ export async function updateProjectAction(
   const project = await getProjectById(id)
   if (!project) return { error: "Project not found." }
 
+  const framerProjectUrl = normalizeFramerProjectUrl(str(form, "framerProjectUrl"))
+  if (framerProjectUrl && !isFramerProjectUrl(framerProjectUrl)) {
+    return { error: "Framer project URL must look like https://framer.com/projects/<Name>--<ID>." }
+  }
+
   await db
     .update(projects)
     .set({
@@ -85,7 +96,7 @@ export async function updateProjectAction(
       platformAssetUrl: str(form, "platformAssetUrl") || null,
       currency: str(form, "currency") || "USD",
       locale: str(form, "locale") || "en-US",
-      framerProjectUrl: str(form, "framerProjectUrl") || null,
+      framerProjectUrl: framerProjectUrl || null,
       updatedAt: new Date(),
     })
     .where(eq(projects.id, id))

@@ -25,6 +25,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     verificationTokensTable: verificationTokens,
   }),
   providers: [Google],
+  // Trust the incoming Host (Vercel sets this automatically; locally we rely on
+  // AUTH_URL). Without it, Auth.js can default to https on localhost and the
+  // post-login redirect fails with ERR_SSL_PROTOCOL_ERROR.
+  trustHost: true,
   session: { strategy: "database" },
   pages: {
     signIn: "/login",
