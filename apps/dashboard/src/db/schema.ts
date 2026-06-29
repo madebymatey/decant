@@ -108,6 +108,12 @@ export const projects = pgTable("project", {
   // Framer target.
   framerProjectUrl: text("framerProjectUrl"),
 
+  // Per-project deployment (the data plane that runs the sync + serves feeds).
+  deployUrl: text("deployUrl"),
+  vercelProjectId: text("vercelProjectId"),
+  deployStatus: text("deployStatus").notNull().default("none"),
+  lastDeployedAt: timestamp("lastDeployedAt"),
+
   // Scheduling.
   scheduleEnabled: boolean("scheduleEnabled").notNull().default(false),
   scheduleIntervalMinutes: integer("scheduleIntervalMinutes").notNull().default(1440),

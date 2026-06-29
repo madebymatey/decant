@@ -71,6 +71,26 @@ export function SettingsPanel({
             </div>
 
             <div className="space-y-4 border-t border-border pt-4">
+              <p className="text-[13px] font-medium text-muted">Deployment</p>
+              <Field
+                label="Deploy URL"
+                hint="The project's own deployment that runs the sync + serves feeds."
+              >
+                <Input
+                  name="deployUrl"
+                  defaultValue={project.deployUrl ?? ""}
+                  placeholder="https://withwine-dev.vercel.app"
+                />
+              </Field>
+              <Field
+                label="Sync key"
+                hint={has("syncKey") ? "Set — leave blank to keep." : "Not set."}
+              >
+                <Input name="syncKey" type="password" placeholder="••••••••" />
+              </Field>
+            </div>
+
+            <div className="space-y-4 border-t border-border pt-4">
               <Field
                 label="WithWine client ID"
                 hint={has("platformApiKey") ? "Set — leave blank to keep." : "Not set."}
@@ -93,7 +113,7 @@ export function SettingsPanel({
           </CardBody>
           <div className="flex items-center justify-between border-t border-border px-5 py-3">
             <div className="flex gap-1.5">
-              {(["platformApiKey", "framerApiKey", "feedKey"] as SecretName[]).map((s) =>
+              {(["platformApiKey", "framerApiKey", "feedKey", "syncKey"] as SecretName[]).map((s) =>
                 has(s) ? (
                   <Badge key={s} tone="success">
                     {s}

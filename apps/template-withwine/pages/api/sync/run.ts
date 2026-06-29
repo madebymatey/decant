@@ -39,7 +39,10 @@ export default async function handler(
   }
 
   try {
-    const result = await syncToFramer()
+    // Optional collection mappings + field overrides from the Decant dashboard.
+    const mappings =
+      req.body && Array.isArray(req.body.mappings) ? req.body.mappings : undefined
+    const result = await syncToFramer({ mappings })
     res.status(200).json({ ok: true, trigger: "manual", result })
   } catch (e: unknown) {
     // Protected endpoint — return the real message so the admin can act on it.

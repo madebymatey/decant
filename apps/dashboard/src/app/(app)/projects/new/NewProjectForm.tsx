@@ -110,8 +110,26 @@ export function NewProjectForm() {
           <Field label="Framer API key" hint="From Framer → project settings.">
             <Input name="framerApiKey" type="password" placeholder="ap_…" />
           </Field>
-          <Field label="Feed key (optional)" hint="Protects /{slug}/api/feed/* if set.">
+          <Field label="Feed key (optional)" hint="Protects the deploy's /api/feed/* if set.">
             <Input name="feedKey" type="password" placeholder="optional shared secret" />
+          </Field>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <h2 className="text-sm font-medium">Deployment</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            The project&apos;s own deployment that runs the sync and serves feeds. You can fill
+            this in later from Settings.
+          </p>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <Field label="Deploy URL" hint="e.g. https://withwine-dev.vercel.app">
+            <Input name="deployUrl" placeholder="https://withwine-dev.vercel.app" />
+          </Field>
+          <Field label="Sync key" hint="The SYNC_KEY set on that deployment — used to trigger syncs.">
+            <Input name="syncKey" type="password" placeholder="shared secret" />
           </Field>
         </CardBody>
       </Card>

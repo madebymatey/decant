@@ -9,11 +9,11 @@ import { cn } from "@/lib/cn"
 
 export function FeedsPanel({
   project,
-  baseUrl,
+  deployUrl,
   hasFeedKey,
 }: {
   project: Project
-  baseUrl: string
+  deployUrl: string
   hasFeedKey: boolean
 }) {
   const [active, setActive] = useState<FeedKind>("products")
@@ -46,7 +46,21 @@ export function FeedsPanel({
     setTimeout(() => setCopied(null), 1200)
   }
 
-  const publicUrl = (kind: FeedKind) => `${baseUrl}/${project.slug}/api/feed/${kind}`
+  const base = deployUrl.replace(/\/+$/, "")
+  const publicUrl = (kind: FeedKind) => `${base}/api/feed/${kind}`
+
+  if (!deployUrl) {
+    return (
+      <Card className="p-6">
+        <h2 className="text-sm font-medium">Feeds live on the project deployment</h2>
+        <p className="mt-1.5 text-sm text-muted">
+          This project has no deployment URL yet. Add it under{" "}
+          <span className="text-foreground">Settings → Deployment</span>, then the feed URLs and
+          previews will point at <span className="font-mono">{"<deploy>"}/api/feed/…</span>.
+        </p>
+      </Card>
+    )
+  }
 
   return (
     <div className="space-y-4">

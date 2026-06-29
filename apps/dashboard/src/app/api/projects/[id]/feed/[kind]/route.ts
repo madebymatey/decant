@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { auth } from "@/auth"
 import { getProjectById, getSecret } from "@/lib/projects"
-import { buildFeed, isFeedKind } from "@/lib/feeds"
+import { isFeedKind } from "@/lib/feed-kinds"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -9,9 +9,11 @@ export const maxDuration = 60
 
 /**
  * GET /api/projects/{id}/feed/{kind} — authenticated feed preview for the
- * dashboard's viewer. Unlike the public /{slug}/api/feed route, this bypasses
- * the feedKey gate (the caller is a signed-in dashboard user) so previews work
- * even when a feed is locked down.
+ * dashboard's Feeds tab.
+ *
+ * Feeds now live on the project's own deployment, so this proxies
+ * `<deployUrl>/api/feed/{kind}` (adding the feedKey if the feed is locked). The
+ * dashboard no longer builds feeds itself.
  */
 export async function GET(
   _req: NextRequest,
@@ -27,15 +29,27 @@ export async function GET(
 
   const project = await getProjectById(params.id)
   if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 })
-
-  const platformApiKey = await getSecret(project.id, "platformApiKey")
-  if (!platformApiKey) {
-    return NextResponse.json({ error: "Project has no platform API key" }, { status: 409 })
+  if (!project.deployUrl) {
+    return NextResponse.json(
+      { error: "No deployment URL set for this project yet." },
+      { status: 409 }
+    )
   }
 
+  const feedKey = await getSecret(project.id, "feedKey")
+  const base = project.deployUrl.replace(/\/+$/, "")
+  const url = `${base}/api/feed/${params.kind}${feedKey ? `?key=${encodeURIComponent(feedKey)}` : ""}`
+
   try {
-    const data = await buildFeed(project, platformApiKey, params.kind)
-    return NextResponse.json(data)
+    const res = await fetch(url, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(30_000),
+    })
+    const text = await res.text()
+    return new NextResponse(text, {
+      status: res.status,
+      headers: { "content-type": "application/json" },
+    })
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },

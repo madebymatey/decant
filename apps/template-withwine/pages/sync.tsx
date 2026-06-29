@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react"
 
 type SyncCounts = {
-  wineTypes: number
-  varietals: number
-  vintages: number
-  regions: number
-  products: number
+  added: number
+  updated: number
+  deleted: number
+  failed: number
+  skipped: number
 }
 
 /**
@@ -86,11 +86,11 @@ export default function SyncPage() {
         <div style={{ ...statusBox, borderColor: "#16a34a55", background: "#16a34a11" }}>
           <strong style={{ color: "#15803d" }}>✓ Sync complete</strong>
           <ul style={countList}>
-            <li>Products: <b>{counts.products}</b></li>
-            <li>Wine Types: <b>{counts.wineTypes}</b></li>
-            <li>Varietals: <b>{counts.varietals}</b></li>
-            <li>Vintages: <b>{counts.vintages}</b></li>
-            <li>Regions: <b>{counts.regions}</b></li>
+            <li>Added: <b>{counts.added}</b></li>
+            <li>Updated: <b>{counts.updated}</b></li>
+            <li>Deleted: <b>{counts.deleted}</b></li>
+            <li>Skipped: <b>{counts.skipped}</b></li>
+            <li>Failed: <b>{counts.failed}</b></li>
           </ul>
         </div>
       )}

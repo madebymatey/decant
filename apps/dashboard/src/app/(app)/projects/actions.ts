@@ -44,6 +44,8 @@ export async function createProjectAction(
   const platformApiKey = str(form, "platformApiKey")
   const framerApiKey = str(form, "framerApiKey")
   const feedKey = str(form, "feedKey")
+  const syncKey = str(form, "syncKey")
+  const deployUrl = str(form, "deployUrl").replace(/\/+$/, "")
 
   const [created] = await db
     .insert(projects)
@@ -58,6 +60,7 @@ export async function createProjectAction(
       currency: str(form, "currency") || "USD",
       locale: str(form, "locale") || "en-US",
       framerProjectUrl: framerProjectUrl || null,
+      deployUrl: deployUrl || null,
       createdBy: session.user.email ?? session.user.id,
     })
     .returning({ id: projects.id })
@@ -65,6 +68,7 @@ export async function createProjectAction(
   if (platformApiKey) await setSecret(created.id, "platformApiKey", platformApiKey)
   if (framerApiKey) await setSecret(created.id, "framerApiKey", framerApiKey)
   if (feedKey) await setSecret(created.id, "feedKey", feedKey)
+  if (syncKey) await setSecret(created.id, "syncKey", syncKey)
 
   revalidatePath("/")
   redirect(`/projects/${slug}`)
@@ -97,12 +101,13 @@ export async function updateProjectAction(
       currency: str(form, "currency") || "USD",
       locale: str(form, "locale") || "en-US",
       framerProjectUrl: framerProjectUrl || null,
+      deployUrl: str(form, "deployUrl").replace(/\/+$/, "") || null,
       updatedAt: new Date(),
     })
     .where(eq(projects.id, id))
 
   // Only overwrite secrets when a new value is supplied.
-  for (const name of ["platformApiKey", "framerApiKey", "feedKey"] as SecretName[]) {
+  for (const name of ["platformApiKey", "framerApiKey", "feedKey", "syncKey"] as SecretName[]) {
     const v = str(form, name)
     if (v) await setSecret(id, name, v)
   }

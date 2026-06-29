@@ -1,6 +1,5 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { headers } from "next/headers"
 import { ChevronLeft, Wine } from "lucide-react"
 import { requireUser } from "@/lib/guards"
 import {
@@ -43,12 +42,6 @@ export default async function ProjectPage({
     getMappings(project.id),
     listSecretNames(project.id),
   ])
-
-  // Best-effort absolute origin for displaying public feed URLs.
-  const h = headers()
-  const proto = h.get("x-forwarded-proto") ?? "https"
-  const host = h.get("host") ?? "decant.matey.co"
-  const baseUrl = `${proto}://${host}`
 
   return (
     <div>
@@ -103,7 +96,7 @@ export default async function ProjectPage({
       {tab === "feeds" && (
         <FeedsPanel
           project={project}
-          baseUrl={baseUrl}
+          deployUrl={project.deployUrl ?? ""}
           hasFeedKey={secretsSet.includes("feedKey")}
         />
       )}

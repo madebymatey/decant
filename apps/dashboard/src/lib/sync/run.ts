@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm"
 import { db } from "@/db"
 import { projects, syncRuns, collectionMappings, type SyncCounts } from "@/db/schema"
 import { getSecret } from "@/lib/projects"
-import { runSync } from "./engine"
 
 export type SyncOutcome = {
   ok: boolean
@@ -13,9 +12,13 @@ export type SyncOutcome = {
 }
 
 /**
- * Execute a sync for one project end to end: record a run, call the engine,
- * persist the result, and advance the schedule clock. Never throws — failures
- * are captured on the run row so the UI/cron can keep going.
+ * Execute a sync for one project by triggering its own deployment.
+ *
+ * The dashboard is the control plane: it doesn't run the Framer push itself, it
+ * calls the project's data-plane deploy (`POST <deployUrl>/api/sync/run`, gated by
+ * the project's syncKey) and passes the collection mappings in the body. The
+ * deploy does the work with its own credentials; we record the result here so the
+ * Activity feed + "last synced" keep working. Never throws.
  */
 export async function executeSync(
   projectId: string,
@@ -31,19 +34,16 @@ export async function executeSync(
   try {
     const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) })
     if (!project) throw new Error("Project not found")
+    if (!project.deployUrl) {
+      throw new Error("No deployment URL set for this project — add it in Settings first.")
+    }
 
-    const [platformApiKey, framerApiKey, mappings] = await Promise.all([
-      getSecret(projectId, "platformApiKey"),
-      getSecret(projectId, "framerApiKey"),
+    const [syncKey, mappings] = await Promise.all([
+      getSecret(projectId, "syncKey"),
       db.select().from(collectionMappings).where(eq(collectionMappings.projectId, projectId)),
     ])
 
-    const counts = await runSync({
-      project,
-      platformApiKey: platformApiKey ?? "",
-      framerApiKey: framerApiKey ?? "",
-      mappings,
-    })
+    const counts = await triggerRemoteSync(project.deployUrl, syncKey, mappings)
 
     const finishedAt = new Date()
     await db
@@ -75,6 +75,45 @@ export async function executeSync(
       })
       .where(eq(syncRuns.id, run.id))
     return { ok: false, runId: run.id, error }
+  }
+}
+
+/** POST the project's deploy and normalise its response into SyncCounts. */
+async function triggerRemoteSync(
+  deployUrl: string,
+  syncKey: string | undefined,
+  mappings: Array<{ source: string; framerCollectionName: string; fieldOverrides: unknown }>
+): Promise<SyncCounts> {
+  const url = `${deployUrl.replace(/\/+$/, "")}/api/sync/run`
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(syncKey ? { authorization: `Bearer ${syncKey}` } : {}),
+    },
+    body: JSON.stringify({ mappings }),
+    // The headless Framer push can take a while.
+    signal: AbortSignal.timeout(280_000),
+  })
+
+  const text = await res.text()
+  let json: { ok?: boolean; result?: Partial<SyncCounts>; error?: string } = {}
+  try {
+    json = JSON.parse(text)
+  } catch {
+    throw new Error(`Deploy returned ${res.status}: ${text.slice(0, 200)}`)
+  }
+  if (!res.ok || json.ok === false) {
+    throw new Error(json.error ?? `Deploy sync failed (${res.status})`)
+  }
+
+  const r = json.result ?? {}
+  return {
+    added: r.added ?? 0,
+    updated: r.updated ?? 0,
+    deleted: r.deleted ?? 0,
+    failed: r.failed ?? 0,
+    skipped: r.skipped ?? 0,
   }
 }
 

@@ -16,37 +16,86 @@ import { resolvedConfig } from "../../withwine.config"
  *
  * Runs on the server (cron / on-demand) without opening Framer. It owns a set of
  * "option" collections — Wine Types, Varietals, Vintage, Region — plus Products,
- * and links each product to its options via `collectionReference` fields. A
- * reference value is the target item's Framer **id**, so after syncing each
- * option collection we read back its slug -> id map and use those ids.
+ * and links each product to its options via reference fields.
+ *
+ * Collection names come from env (FRAMER_*_COLLECTION) by default, and can be
+ * overridden per-call by `mappings` — the shape the Decant dashboard sends on
+ * `POST /api/sync/run` so a project's collection config (names + single-vs-multi
+ * reference) drives the sync. With no mappings the behaviour is unchanged.
  *
  * Auth: `framer-api` reads the API key from FRAMER_API_KEY.
  * Target: FRAMER_PROJECT_URL (e.g. https://framer.com/projects/Site--aabb1122).
- *
- * Collections here should be dedicated to this sync (don't also manage them with
- * another tool, or writes will conflict).
  */
 
-export type SyncResult = {
-  wineTypes: number
-  varietals: number
-  vintages: number
-  regions: number
-  products: number
+/** Add/update/delete counts, matching the dashboard's sync_run shape. */
+export type SyncCounts = {
+  added: number
+  updated: number
+  deleted: number
+  failed: number
+  skipped: number
 }
 
-/**
- * Collection names this sync owns. Configurable so a test run can target NEW
- * collections instead of clobbering ones another tool (e.g. FramerSync) already
- * manages. ⚠️ If a name matches an existing collection, this sync writes to and
- * prunes it — use fresh names until you're ready to cut over.
- */
-const COLLECTION_NAMES = {
+/** Per-field override (single vs multi reference, on/off) for a collection. */
+export type FieldOverrideInput = {
+  field: string
+  type: string
+  enabled: boolean
+}
+
+/** One collection mapping as sent by the dashboard. */
+export type MappingInput = {
+  source: string
+  framerCollectionName?: string
+  fieldOverrides?: FieldOverrideInput[]
+}
+
+type SyncSource = "wineTypes" | "varietals" | "vintages" | "regions" | "products"
+
+/** Default collection names — env first, then a sensible label. */
+const DEFAULT_COLLECTION_NAMES: Record<SyncSource, string> = {
   wineTypes: process.env.FRAMER_WINETYPES_COLLECTION ?? "Wine Types",
   varietals: process.env.FRAMER_VARIETALS_COLLECTION ?? "Varietals",
   vintages: process.env.FRAMER_VINTAGE_COLLECTION ?? "Vintage",
   regions: process.env.FRAMER_REGION_COLLECTION ?? "Region",
   products: process.env.FRAMER_PRODUCTS_COLLECTION ?? "Products",
+}
+
+/** The dashboard's source keys → this engine's collection keys. */
+const SOURCE_ALIASES: Record<string, SyncSource> = {
+  wineTypes: "wineTypes",
+  varietals: "varietals",
+  vintage: "vintages",
+  vintages: "vintages",
+  region: "regions",
+  regions: "regions",
+  products: "products",
+}
+
+const REFERENCE_FIELDS = ["Wine Type", "Varietal", "Vintage", "Region"] as const
+type ReferenceFieldName = (typeof REFERENCE_FIELDS)[number]
+
+type Resolved = {
+  names: Record<SyncSource, string>
+  productOverrides: Map<string, FieldOverrideInput>
+}
+
+function resolve(mappings: MappingInput[] | undefined): Resolved {
+  const names = { ...DEFAULT_COLLECTION_NAMES }
+  const productOverrides = new Map<string, FieldOverrideInput>()
+  for (const m of mappings ?? []) {
+    const key = SOURCE_ALIASES[m.source]
+    if (!key) continue
+    if (m.framerCollectionName) names[key] = m.framerCollectionName
+    if (key === "products") {
+      for (const o of m.fieldOverrides ?? []) productOverrides.set(o.field, o)
+    }
+  }
+  return { names, productOverrides }
+}
+
+function isMulti(overrides: Map<string, FieldOverrideInput>, field: ReferenceFieldName): boolean {
+  return overrides.get(field)?.type === "multiCollectionReference"
 }
 
 // --- Field-data builders (each entry needs a `type` discriminator) -------------
@@ -59,9 +108,10 @@ const bool = (v: boolean | null | undefined): FieldDataEntryInput | undefined =>
   v == null ? undefined : { type: "boolean", value: v }
 const image = (v: string | null | undefined): FieldDataEntryInput | undefined =>
   v ? { type: "image", value: v } : undefined
-// A reference value is the target item's Framer id; omit when there's no match.
-const ref = (id: string | undefined): FieldDataEntryInput | undefined =>
+const singleRef = (id: string | undefined): FieldDataEntryInput | undefined =>
   id ? { type: "collectionReference", value: id } : undefined
+const multiRef = (id: string | undefined): FieldDataEntryInput | undefined =>
+  id ? { type: "multiCollectionReference", value: [id] } : undefined
 
 function compact(
   entries: Record<string, FieldDataEntryInput | undefined>
@@ -78,11 +128,6 @@ async function ensureCollection(framer: Framer, name: string): Promise<Collectio
   return all.find((c) => c.name === name) ?? (await framer.createCollection(name))
 }
 
-/**
- * Ensure the named fields exist with the right type; return a name -> fieldId
- * map. Fields whose type changed (e.g. Vintage from number to reference) are
- * dropped and recreated so the schema matches.
- */
 async function ensureFields(
   collection: Collection,
   desired: CreateField[]
@@ -111,92 +156,100 @@ async function ensureFields(
   return idByName
 }
 
-/** Upsert items by slug (update if the slug exists, else create) and prune. */
+type Delta = { added: number; updated: number; deleted: number }
+
+/** Upsert items by slug and prune stale ones; report add/update/delete counts. */
 async function upsertItems(
   collection: Collection,
   rows: { slug: string; fieldData: FieldDataInput }[]
-): Promise<void> {
+): Promise<Delta> {
   const existing = await collection.getItems()
   const idBySlug = new Map(existing.map((it) => [it.slug, it.id]))
 
+  let added = 0
+  let updated = 0
   const items: CollectionItemInput[] = rows.map((r) => {
     const id = idBySlug.get(r.slug)
-    return id
-      ? { id, slug: r.slug, fieldData: r.fieldData }
-      : { slug: r.slug, fieldData: r.fieldData }
+    if (id) {
+      updated++
+      return { id, slug: r.slug, fieldData: r.fieldData }
+    }
+    added++
+    return { slug: r.slug, fieldData: r.fieldData }
   })
   if (items.length > 0) await collection.addItems(items)
 
   const keep = new Set(rows.map((r) => r.slug))
   const stale = existing.filter((it) => !keep.has(it.slug)).map((it) => it.id)
   if (stale.length > 0) await collection.removeItems(stale)
+
+  return { added, updated, deleted: stale.length }
 }
 
-/**
- * Sync a single-field "option" collection (just a Name) from a slug -> display
- * map. Returns the collection id (for reference field targets) and the resulting
- * slug -> item id map (for reference values).
- */
 async function syncOptionCollection(
   framer: Framer,
   name: string,
   bySlug: Map<string, string>
-): Promise<{ collectionId: string; idBySlug: Map<string, string> }> {
+): Promise<{ collectionId: string; idBySlug: Map<string, string>; delta: Delta }> {
   const collection = await ensureCollection(framer, name)
   const fields = await ensureFields(collection, [{ type: "string", name: "Name" }])
-  await upsertItems(
+  const delta = await upsertItems(
     collection,
     [...bySlug].map(([slug, display]) => ({
       slug,
       fieldData: compact({ [fields.get("Name")!]: str(display) }),
     }))
   )
-  return { collectionId: collection.id, idBySlug: await slugIdMap(collection) }
-}
-
-/** Read a collection's current items as a slug -> Framer item id map. */
-async function slugIdMap(collection: Collection): Promise<Map<string, string>> {
   const items = await collection.getItems()
-  return new Map(items.map((it) => [it.slug, it.id]))
+  return {
+    collectionId: collection.id,
+    idBySlug: new Map(items.map((it) => [it.slug, it.id])),
+    delta,
+  }
 }
-
-// --- Sync ----------------------------------------------------------------------
 
 /**
  * HTTP headers must be Latin-1. A non-ASCII char (e.g. a Cyrillic homoglyph
  * pasted into a credential) throws a cryptic "ByteString" error deep in fetch.
- * Catch it early and name the exact variable + position, without leaking the value.
  */
 function assertHeaderSafe(name: string, value: string | undefined): void {
   if (!value) return
   for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i)
-    if (code > 255) {
+    if (value.charCodeAt(i) > 255) {
       throw new Error(
-        `${name} has a non-ASCII character at index ${i} (char code ${code}). ` +
-          `Likely a copy-paste homoglyph — retype that character as plain ASCII.`
+        `${name} has a non-ASCII character at index ${i} — likely a copy-paste homoglyph.`
       )
     }
   }
 }
 
-/** Add a slug -> display entry to an option map, skipping empty values. */
 function addOption(map: Map<string, string>, value: string | null | undefined): void {
   if (!value) return
   const s = slugify(value)
   if (s) map.set(s, value)
 }
 
-export async function syncToFramer(): Promise<SyncResult> {
+// --- Sync ----------------------------------------------------------------------
+
+const emptyCounts = (): SyncCounts => ({ added: 0, updated: 0, deleted: 0, failed: 0, skipped: 0 })
+
+function accumulate(into: SyncCounts, delta: Delta): void {
+  into.added += delta.added
+  into.updated += delta.updated
+  into.deleted += delta.deleted
+}
+
+export async function syncToFramer(options?: { mappings?: MappingInput[] }): Promise<SyncCounts> {
   const projectUrl = process.env.FRAMER_PROJECT_URL
   if (!projectUrl) throw new Error("FRAMER_PROJECT_URL is not set")
   if (!process.env.FRAMER_API_KEY) throw new Error("FRAMER_API_KEY is not set")
 
-  // Fail fast with a precise, value-safe message if any credential is tainted.
   assertHeaderSafe("FRAMER_PROJECT_URL", process.env.FRAMER_PROJECT_URL)
   assertHeaderSafe("FRAMER_API_KEY", process.env.FRAMER_API_KEY)
   assertHeaderSafe("PLATFORM_API_KEY", process.env.PLATFORM_API_KEY)
   assertHeaderSafe("PLATFORM_STORE_ID", process.env.PLATFORM_STORE_ID)
+
+  const resolved = resolve(options?.mappings)
 
   const products = toCmsRecords(
     toFramerProducts(await getCatalogProducts(), { locale: resolvedConfig.locale })
@@ -214,15 +267,31 @@ export async function syncToFramer(): Promise<SyncResult> {
     addOption(regionBySlug, p.region)
   }
 
+  const counts = emptyCounts()
+
   return withConnection(projectUrl, async (framer) => {
     // Option collections first — references need their item ids.
-    const wineTypes = await syncOptionCollection(framer, COLLECTION_NAMES.wineTypes, wineTypeBySlug)
-    const varietals = await syncOptionCollection(framer, COLLECTION_NAMES.varietals, varietalBySlug)
-    const vintages = await syncOptionCollection(framer, COLLECTION_NAMES.vintages, vintageBySlug)
-    const regions = await syncOptionCollection(framer, COLLECTION_NAMES.regions, regionBySlug)
+    const wineTypes = await syncOptionCollection(framer, resolved.names.wineTypes, wineTypeBySlug)
+    const varietals = await syncOptionCollection(framer, resolved.names.varietals, varietalBySlug)
+    const vintages = await syncOptionCollection(framer, resolved.names.vintages, vintageBySlug)
+    const regions = await syncOptionCollection(framer, resolved.names.regions, regionBySlug)
+    accumulate(counts, wineTypes.delta)
+    accumulate(counts, varietals.delta)
+    accumulate(counts, vintages.delta)
+    accumulate(counts, regions.delta)
 
-    // Products, with each option linked as a reference (by item id).
-    const productsCol = await ensureCollection(framer, COLLECTION_NAMES.products)
+    // Reference field type follows the override (single vs multi).
+    const refField = (name: ReferenceFieldName, collectionId: string): CreateField => ({
+      type: isMulti(resolved.productOverrides, name)
+        ? "multiCollectionReference"
+        : "collectionReference",
+      name,
+      collectionId,
+    })
+    const refValue = (name: ReferenceFieldName, id: string | undefined) =>
+      isMulti(resolved.productOverrides, name) ? multiRef(id) : singleRef(id)
+
+    const productsCol = await ensureCollection(framer, resolved.names.products)
     const pf = await ensureFields(productsCol, [
       { type: "string", name: "Product ID" },
       { type: "string", name: "Name" },
@@ -231,16 +300,16 @@ export async function syncToFramer(): Promise<SyncResult> {
       { type: "string", name: "Price Label" },
       { type: "image", name: "Image" },
       { type: "string", name: "Category" },
-      { type: "collectionReference", name: "Wine Type", collectionId: wineTypes.collectionId },
-      { type: "collectionReference", name: "Varietal", collectionId: varietals.collectionId },
-      { type: "collectionReference", name: "Vintage", collectionId: vintages.collectionId },
-      { type: "collectionReference", name: "Region", collectionId: regions.collectionId },
+      refField("Wine Type", wineTypes.collectionId),
+      refField("Varietal", varietals.collectionId),
+      refField("Vintage", vintages.collectionId),
+      refField("Region", regions.collectionId),
       { type: "boolean", name: "Available" },
       { type: "string", name: "Appellation" },
       { type: "string", name: "Country Code" },
       { type: "string", name: "SKU" },
     ])
-    await upsertItems(
+    const delta = await upsertItems(
       productsCol,
       products.map((p) => ({
         slug: p.slug,
@@ -252,16 +321,20 @@ export async function syncToFramer(): Promise<SyncResult> {
           [pf.get("Price Label")!]: str(p.priceLabel),
           [pf.get("Image")!]: image(p.image),
           [pf.get("Category")!]: str(p.category),
-          [pf.get("Wine Type")!]: ref(
+          [pf.get("Wine Type")!]: refValue(
+            "Wine Type",
             p.wineType ? wineTypes.idBySlug.get(slugify(p.wineType)) : undefined
           ),
-          [pf.get("Varietal")!]: ref(
+          [pf.get("Varietal")!]: refValue(
+            "Varietal",
             p.varietal ? varietals.idBySlug.get(slugify(p.varietal)) : undefined
           ),
-          [pf.get("Vintage")!]: ref(
+          [pf.get("Vintage")!]: refValue(
+            "Vintage",
             p.vintage != null ? vintages.idBySlug.get(slugify(String(p.vintage))) : undefined
           ),
-          [pf.get("Region")!]: ref(
+          [pf.get("Region")!]: refValue(
+            "Region",
             p.region ? regions.idBySlug.get(slugify(p.region)) : undefined
           ),
           [pf.get("Available")!]: bool(p.available),
@@ -271,13 +344,8 @@ export async function syncToFramer(): Promise<SyncResult> {
         }),
       }))
     )
+    accumulate(counts, delta)
 
-    return {
-      wineTypes: wineTypeBySlug.size,
-      varietals: varietalBySlug.size,
-      vintages: vintageBySlug.size,
-      regions: regionBySlug.size,
-      products: products.length,
-    }
+    return counts
   })
 }
