@@ -1,5 +1,24 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": [
+    "PLATFORM_*",
+    "FRAMER_*",
+    "TOKEN_*",
+    "WW_*",
+    "AUTH_*",
+    "NEXTAUTH_*",
+    "SYNC_KEY",
+    "FEED_KEY",
+    "SYNC_SCHEDULE_ENABLED",
+    "CRON_SECRET",
+    "ALLOWED_ORIGINS",
+    "ALLOW_FRAMER_EDITOR_ORIGINS",
+    "DEMO_MODE",
+    "DATABASE_URL",
+    "SECRETS_ENCRYPTION_KEY",
+    "BOOTSTRAP_ADMIN_EMAIL",
+    "VERCEL_API_TOKEN"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
