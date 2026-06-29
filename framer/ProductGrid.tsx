@@ -2,11 +2,11 @@
 // ONLY the fields ProductCard needs (PRODUCT_CARD_FIELDS), then renders cards.
 
 import { addPropertyControls, ControlType } from "framer"
-import { useProducts } from "./decant"
+import { useProducts } from "./decant.ts"
 import { ProductCard, PRODUCT_CARD_FIELDS } from "./ProductCard"
 
 type ProductGridProps = {
-  baseUrl: string
+  baseUrl?: string
   columns: number
   gap: number
   limit: number
@@ -38,7 +38,7 @@ export function ProductGrid(props: ProductGridProps) {
   const { baseUrl, columns, gap, limit, showCategory, showPrice, addToCartLabel, accent, radius } = props
   const { products, loading, error } = useProducts(baseUrl, PRODUCT_CARD_FIELDS)
 
-  if (!baseUrl) return hint("Set the Middleware URL in the properties panel →")
+  if (!baseUrl && !loading) return hint("Drop a DecantConfig on the page, or set Base URL here →")
   if (loading) return hint("Loading products…")
   if (error) return hint(`Error: ${error}`)
   if (products.length === 0) return hint("No products returned.")
@@ -84,8 +84,8 @@ ProductGrid.defaultProps = {
 addPropertyControls(ProductGrid, {
   baseUrl: {
     type: ControlType.String,
-    title: "Middleware URL",
-    placeholder: "https://your-middleware.vercel.app",
+    title: "Base URL",
+    placeholder: "Uses DecantConfig if blank",
   },
   columns: { type: ControlType.Number, title: "Columns", min: 1, max: 6, step: 1, displayStepper: true, defaultValue: 3 },
   gap: { type: ControlType.Number, title: "Gap", min: 0, max: 64, defaultValue: 16 },

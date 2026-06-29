@@ -1,16 +1,16 @@
-// decant.ts — shared client for the Decant → WithWine middleware.
-// Paste this into Framer as a code file; the components import from "./decant".
-//
-// Responsibilities:
-//   - acquire + cache the short-lived origin-bound token (POST /api/token)
-//   - fetch products with a per-component field selection (?fields=...)
-//   - a local cart (localStorage) that works today; swap for the WithWine cart
-//     once those endpoints are confirmed.
+import { useEffect, useState, createContext, useContext } from "react"
 
-import { useEffect, useState } from "react"
+// Framer bundles each code file as a separate module instance, so module-level
+// variables are NOT shared between components. Shared state lives on globalThis
+// instead — the only store shared across all module instances in the same realm
+// (works in both the browser and Framer's SSR / Node render pass).
 
-/** Product shape returned by the middleware. All fields optional because each
- *  request is field-trimmed (you only get back what you asked for). */
+const G: Record<string, any> =
+  typeof globalThis !== "undefined" ? (globalThis as any) : {}
+
+const W = (): Record<string, any> =>
+  typeof window !== "undefined" ? (window as any) : G
+
 export type DecantProduct = {
   id: string
   title?: string
@@ -26,6 +26,7 @@ export type DecantProduct = {
   sku?: string
   available?: boolean
   category?: string | null
+  wineType?: string | null
   vintage?: number | null
   varietal?: string | null
   region?: string | null
@@ -33,25 +34,72 @@ export type DecantProduct = {
 
 const trimSlash = (s: string) => s.replace(/\/$/, "")
 
-// ---------- token (cached + de-duped across components) ----------
-let tokenCache: { token: string; expiresAt: number } | null = null
-let tokenInFlight: Promise<string> | null = null
+/** URL-safe slug — matches the server's slugify so filter values line up. */
+export function slugify(input: string): string {
+  return input
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+}
+
+// ---------- global config ----------
+
+export type DecantGlobalConfig = {
+  baseUrl: string
+  currency: string
+  locale: string
+}
+
+const CONFIG_EVENT = "decant:config"
+const DEFAULT_CONFIG: DecantGlobalConfig = { baseUrl: "", currency: "USD", locale: "en-US" }
+
+function getStoredConfig(): DecantGlobalConfig {
+  return W().__decantConfig ?? DEFAULT_CONFIG
+}
+
+export function setGlobalConfig(cfg: Partial<DecantGlobalConfig>): void {
+  const current = getStoredConfig()
+  const urlChanged = cfg.baseUrl !== undefined && cfg.baseUrl !== current.baseUrl
+  W().__decantConfig = { ...current, ...cfg }
+  if (urlChanged) W().__decantTokenCache = null
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(CONFIG_EVENT))
+}
+
+export function getGlobalConfig(): DecantGlobalConfig {
+  return getStoredConfig()
+}
+
+export function useGlobalConfig(): DecantGlobalConfig {
+  const [cfg, setCfg] = useState<DecantGlobalConfig>(getStoredConfig)
+  useEffect(() => {
+    const sync = () => setCfg(getStoredConfig())
+    window.addEventListener(CONFIG_EVENT, sync)
+    return () => window.removeEventListener(CONFIG_EVENT, sync)
+  }, [])
+  return cfg
+}
+
+// ---------- token ----------
 
 async function getToken(baseUrl: string): Promise<string> {
   const now = Date.now()
-  if (tokenCache && tokenCache.expiresAt - 5000 > now) return tokenCache.token
-  if (!tokenInFlight) {
-    tokenInFlight = (async () => {
+  const cache = W().__decantTokenCache as { token: string; expiresAt: number } | undefined
+  if (cache && cache.expiresAt - 5000 > now) return cache.token
+
+  let inFlight = W().__decantTokenInFlight as Promise<string> | undefined
+  if (!inFlight) {
+    inFlight = (async () => {
       const res = await fetch(`${trimSlash(baseUrl)}/api/token`, { method: "POST" })
       if (!res.ok) throw new Error(`token request failed (${res.status})`)
       const data = (await res.json()) as { token: string; expiresIn: number }
-      tokenCache = { token: data.token, expiresAt: Date.now() + data.expiresIn * 1000 }
+      W().__decantTokenCache = { token: data.token, expiresAt: Date.now() + data.expiresIn * 1000 }
       return data.token
-    })().finally(() => {
-      tokenInFlight = null
-    })
+    })().finally(() => { W().__decantTokenInFlight = null })
+    W().__decantTokenInFlight = inFlight
   }
-  return tokenInFlight
+  return inFlight
 }
 
 async function authedFetch(baseUrl: string, path: string): Promise<unknown> {
@@ -59,9 +107,7 @@ async function authedFetch(baseUrl: string, path: string): Promise<unknown> {
   const res = await fetch(`${trimSlash(baseUrl)}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) {
-    throw new Error(`${path} failed (${res.status}): ${await res.text()}`)
-  }
+  if (!res.ok) throw new Error(`${path} failed (${res.status}): ${await res.text()}`)
   return res.json()
 }
 
@@ -69,63 +115,84 @@ const fieldsQuery = (fields?: string[]) =>
   fields && fields.length ? `?fields=${fields.join(",")}` : ""
 
 export async function fetchProducts(
-  baseUrl: string,
+  baseUrl?: string,
   opts: { fields?: string[] } = {}
 ): Promise<DecantProduct[]> {
-  const data = (await authedFetch(baseUrl, `/api/products${fieldsQuery(opts.fields)}`)) as {
+  const url = baseUrl || getGlobalConfig().baseUrl
+  const data = (await authedFetch(url, `/api/products${fieldsQuery(opts.fields)}`)) as {
     items?: DecantProduct[]
   }
   return data.items ?? []
 }
 
 export async function fetchProduct(
-  baseUrl: string,
-  id: string,
+  baseUrl?: string,
+  id?: string,
   opts: { fields?: string[] } = {}
 ): Promise<DecantProduct | null> {
+  const url = baseUrl || getGlobalConfig().baseUrl
+  if (!id) return null
   const data = (await authedFetch(
-    baseUrl,
+    url,
     `/api/products/${encodeURIComponent(id)}${fieldsQuery(opts.fields)}`
   )) as { product?: DecantProduct }
   return data.product ?? null
 }
 
-/** Fetch a product list, requesting only `fields`. */
-export function useProducts(baseUrl: string, fields: string[]) {
+export function useProducts(baseUrl?: string, fields: string[] = []) {
+  const config = useGlobalConfig()
+  const resolvedUrl = baseUrl || config.baseUrl
   const [products, setProducts] = useState<DecantProduct[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
   const fieldsKey = fields.join(",")
 
   useEffect(() => {
-    if (!baseUrl) {
-      setLoading(false)
-      return
-    }
+    if (!resolvedUrl) { setLoading(false); return }
     let cancelled = false
     setLoading(true)
-    fetchProducts(baseUrl, { fields })
-      .then((p) => {
-        if (!cancelled) {
-          setProducts(p)
-          setError(null)
-        }
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [baseUrl, fieldsKey])
+    fetchProducts(resolvedUrl, { fields })
+      .then((p) => { if (!cancelled) { setProducts(p); setError(null) } })
+      .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [resolvedUrl, fieldsKey])
 
   return { products, loading, error }
 }
 
-// ---------- local cart (works now; replace with WithWine cart later) ----------
+// ---------- cart drawer state ----------
+
+const DRAWER_EVENT = "decant:drawer"
+
+function getDrawerOpen(): boolean { return W().__decantDrawer ?? false }
+
+export function openCart(): void {
+  W().__decantDrawer = true
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(DRAWER_EVENT))
+}
+
+export function closeCart(): void {
+  W().__decantDrawer = false
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(DRAWER_EVENT))
+}
+
+export function toggleCart(): void {
+  getDrawerOpen() ? closeCart() : openCart()
+}
+
+export function useCartDrawer() {
+  const [open, setOpen] = useState(getDrawerOpen)
+  useEffect(() => {
+    const sync = () => setOpen(getDrawerOpen())
+    window.addEventListener(DRAWER_EVENT, sync)
+    return () => window.removeEventListener(DRAWER_EVENT, sync)
+  }, [])
+  return { open, openCart, closeCart, toggleCart }
+}
+
+// ---------- cart (localStorage) ----------
+
 export type CartItem = {
   id: string
   title?: string
@@ -139,11 +206,8 @@ const CART_EVENT = "decant:cart"
 
 function readCart(): CartItem[] {
   if (typeof window === "undefined") return []
-  try {
-    return JSON.parse(window.localStorage.getItem(CART_KEY) ?? "[]") as CartItem[]
-  } catch {
-    return []
-  }
+  try { return JSON.parse(window.localStorage.getItem(CART_KEY) ?? "[]") as CartItem[] }
+  catch { return [] }
 }
 
 function writeCart(items: CartItem[]): void {
@@ -153,84 +217,86 @@ function writeCart(items: CartItem[]): void {
 }
 
 export function addToCart(
-  product: { id: string; title?: string; price?: number | null; image?: string },
+  product: { id: string | number; title?: string; price?: number | null; image?: string },
   quantity = 1
 ): void {
+  const id = String(product.id)
   const items = readCart()
-  const existing = items.find((i) => i.id === product.id)
-  if (existing) {
-    existing.quantity += quantity
-  } else {
-    items.push({
-      id: product.id,
-      title: product.title,
-      price: product.price ?? null,
-      image: product.image,
-      quantity,
-    })
-  }
+  const existing = items.find((i) => String(i.id) === id)
+  if (existing) { existing.quantity += quantity }
+  else { items.push({ id, title: product.title, price: product.price ?? null, image: product.image, quantity }) }
   writeCart(items)
 }
 
-/** Set an item's quantity; a quantity <= 0 removes the line. */
-export function setQuantity(id: string, quantity: number): void {
+export function setQuantity(id: string | number, quantity: number): void {
+  const key = String(id)
   const items = readCart()
-  const item = items.find((i) => i.id === id)
+  const item = items.find((i) => String(i.id) === key)
   if (!item) return
-  if (quantity <= 0) {
-    writeCart(items.filter((i) => i.id !== id))
-  } else {
-    item.quantity = quantity
-    writeCart(items)
-  }
+  if (quantity <= 0) writeCart(items.filter((i) => String(i.id) !== key))
+  else { item.quantity = quantity; writeCart(items) }
 }
 
-/** Remove a line from the cart. */
-export function removeFromCart(id: string): void {
-  writeCart(readCart().filter((i) => i.id !== id))
+export function removeFromCart(id: string | number): void {
+  const key = String(id)
+  writeCart(readCart().filter((i) => String(i.id) !== key))
 }
+
+// ---------- per-line item context ----------
+// React Context lets CartProductList give each rendered row its own cart item,
+// which the row's code components (quantity, subtotal, remove, image) read via
+// useCartLine(). The Context object itself is stored on globalThis so every
+// duplicated Framer module instance shares the SAME context (otherwise the
+// Provider and the consumer would use different context objects and never match).
+
+export function getCartLineContext(): React.Context<CartItem | null> {
+  if (!G.__decantCartLineContext) {
+    G.__decantCartLineContext = createContext<CartItem | null>(null)
+  }
+  return G.__decantCartLineContext
+}
+
+/** Read the current row's cart item. Returns null outside a CartProductList row. */
+export function useCartLine(): CartItem | null {
+  return useContext(getCartLineContext())
+}
+
+// Legacy fallback (kept so older pastes don't break). Prefer useCartLine().
+export function setCurrentItem(item: CartItem | null): void {
+  W().__decantCurrentItem = item
+}
+export function getCurrentItem(): CartItem | null {
+  return W().__decantCurrentItem ?? null
+}
+
+// ---------- checkout ----------
 
 export type CheckoutOptions = {
-  /** ISO country (e.g. "AU"). Optional — WithWine collects the address at checkout. */
   country?: string
-  /** WithWine state id, for an optional shipping-estimate prefill. */
   stateId?: string | number
-  /** Postcode, for an optional shipping-estimate prefill. */
   postcode?: string
 }
 
-/**
- * Hand the cart off to WithWine's hosted checkout. Asks the middleware to build
- * the checkout URL (cart encoded as productIds/quantities) and redirects there.
- * WithWine owns payment, tax, shipping and compliance, then returns the customer
- * to /CheckoutSuccess?oid=<orderId>. No server-side cart is involved — the cart
- * lives here (localStorage) until this hand-off.
- */
-export async function checkout(
-  baseUrl: string,
-  opts: CheckoutOptions = {}
-): Promise<void> {
+export async function checkout(baseUrl?: string, opts: CheckoutOptions = {}): Promise<void> {
+  const url = baseUrl || getGlobalConfig().baseUrl
   const items = readCart().map((i) => ({ id: i.id, quantity: i.quantity }))
   if (items.length === 0) return
-  const token = await getToken(baseUrl)
-  const res = await fetch(`${trimSlash(baseUrl)}/api/checkout`, {
+  const token = await getToken(url)
+  const res = await fetch(`${trimSlash(url)}/api/checkout`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ items, ...opts }),
   })
-  if (!res.ok) {
-    throw new Error(`checkout failed (${res.status}): ${await res.text()}`)
-  }
-  const { url } = (await res.json()) as { url: string }
-  window.location.href = url
+  if (!res.ok) throw new Error(`checkout failed (${res.status}): ${await res.text()}`)
+  const { url: checkoutUrl } = (await res.json()) as { url: string }
+  window.location.href = checkoutUrl
 }
 
-/**
- * Reactive cart hook. Pass `baseUrl` (the middleware origin) to enable
- * `checkout()` — it needs that origin to build the WithWine hand-off URL.
- */
 export function useCart(baseUrl?: string) {
+  const config = useGlobalConfig()
+  const resolvedUrl = baseUrl || config.baseUrl
   const [items, setItems] = useState<CartItem[]>([])
+
   useEffect(() => {
     const sync = () => setItems(readCart())
     sync()
@@ -241,16 +307,124 @@ export function useCart(baseUrl?: string) {
       window.removeEventListener("storage", sync)
     }
   }, [])
+
   const count = items.reduce((n, i) => n + i.quantity, 0)
   const total = items.reduce((s, i) => s + (i.price ?? 0) * i.quantity, 0)
+
   return {
     items,
     count,
     total,
+    currency: config.currency,
     addToCart,
     setQuantity,
     removeFromCart,
     clear: () => writeCart([]),
-    checkout: (opts?: CheckoutOptions) => checkout(baseUrl ?? "", opts),
+    checkout: (opts?: CheckoutOptions) => checkout(resolvedUrl, opts),
   }
+}
+
+// ---------- facet filters (multi-select, shared across components) ----------
+// Each "facet" (e.g. "wineType", "varietal") holds the selected slugs. Stored on
+// globalThis so the filter UI and the product list share one source of truth.
+
+const FILTER_EVENT = "decant:filters"
+
+function getFilters(): Record<string, string[]> {
+  return W().__decantFilters ?? {}
+}
+
+function dispatchFilters(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(FILTER_EVENT))
+}
+
+export function toggleFilter(facet: string, value: string): void {
+  const all = { ...getFilters() }
+  const set = new Set(all[facet] ?? [])
+  set.has(value) ? set.delete(value) : set.add(value)
+  all[facet] = [...set]
+  W().__decantFilters = all
+  dispatchFilters()
+}
+
+export function clearFilter(facet?: string): void {
+  if (facet) {
+    const all = { ...getFilters() }
+    delete all[facet]
+    W().__decantFilters = all
+  } else {
+    W().__decantFilters = {}
+  }
+  dispatchFilters()
+}
+
+export function isFilterActive(facet: string, value: string): boolean {
+  return (getFilters()[facet] ?? []).includes(value)
+}
+
+/** Reactive hook over a single facet's selected values. */
+export function useFacet(facet: string) {
+  const [selected, setSelected] = useState<string[]>(() => getFilters()[facet] ?? [])
+  useEffect(() => {
+    const sync = () => setSelected(getFilters()[facet] ?? [])
+    sync()
+    window.addEventListener(FILTER_EVENT, sync)
+    return () => window.removeEventListener(FILTER_EVENT, sync)
+  }, [facet])
+  return {
+    selected,
+    isActive: (v: string) => selected.includes(v),
+    toggle: (v: string) => toggleFilter(facet, v),
+    clear: () => clearFilter(facet),
+  }
+}
+
+/** Reactive hook over ALL active facets (used by the product list). */
+export function useFilters() {
+  const [filters, setFilters] = useState<Record<string, string[]>>(getFilters)
+  useEffect(() => {
+    const sync = () => setFilters({ ...getFilters() })
+    sync()
+    window.addEventListener(FILTER_EVENT, sync)
+    return () => window.removeEventListener(FILTER_EVENT, sync)
+  }, [])
+  return filters
+}
+
+// Maps a facet name to the product field it filters on. Product values are
+// slugified before comparison so they line up with the option slugs.
+const FACET_FIELD: Record<string, (p: DecantProduct) => string | null | undefined> = {
+  wineType: (p) => p.wineType,
+  varietal: (p) => p.varietal,
+  category: (p) => p.category,
+  region: (p) => p.region,
+}
+
+/** True if a product satisfies every active facet (AND across facets, OR within). */
+export function productMatchesFilters(
+  p: DecantProduct,
+  filters: Record<string, string[]>
+): boolean {
+  for (const [facet, values] of Object.entries(filters)) {
+    if (!values || values.length === 0) continue
+    const accessor = FACET_FIELD[facet]
+    const raw = accessor ? accessor(p) : undefined
+    const slug = raw ? slugify(raw) : ""
+    if (!values.includes(slug)) return false
+  }
+  return true
+}
+
+// ---------- product card context (for slotted cards in the product list) ----------
+
+export function getProductContext(): React.Context<DecantProduct | null> {
+  if (!G.__decantProductContext) {
+    G.__decantProductContext = createContext<DecantProduct | null>(null)
+  }
+  return G.__decantProductContext
+}
+
+/** Read the current card's product inside a ProductList row. */
+export function useProductCard(): DecantProduct | null {
+  return useContext(getProductContext())
 }
