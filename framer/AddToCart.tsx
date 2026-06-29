@@ -27,6 +27,10 @@ function resolveImageUrl(imageFile: unknown, image?: string): string {
   return image ?? ""
 }
 
+/**
+ * @framerSupportedLayoutWidth any-prefer-fixed
+ * @framerSupportedLayoutHeight any-prefer-fixed
+ */
 export function AddToCart({
   children,
   productId,
@@ -63,11 +67,21 @@ export function AddToCart({
     setTimeout(() => setAdded(false), 1500)
   }, [productId, productTitle, price, imageFile, image, quantity, product])
 
-  // When a designed component is slotted in, wrap it invisibly — the design
-  // owns all visuals, we only inject the click behaviour.
+  // When a designed component is slotted in, the design owns all visuals — we
+  // only inject the click behaviour. Use a grid wrapper that fills the frame so
+  // the slotted child stretches to fill it (grid's default is `stretch`).
   if (children) {
     return (
-      <div style={{ display: "contents", cursor: "pointer" }} onClick={handleClick}>
+      <div
+        onClick={handleClick}
+        style={{
+          display: "grid",
+          width: "100%",
+          height: "100%",
+          cursor: "pointer",
+          ...style,
+        }}
+      >
         {children}
       </div>
     )
