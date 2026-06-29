@@ -123,7 +123,8 @@ export async function updateScheduleAction(
   if (!project) return { error: "Project not found." }
 
   const enabled = form.get("scheduleEnabled") === "on"
-  const intervalMinutes = Math.max(15, Number(str(form, "scheduleIntervalMinutes")) || 1440)
+  // Floor is daily: the Vercel cron tick only runs once a day (see vercel.json).
+  const intervalMinutes = Math.max(1440, Number(str(form, "scheduleIntervalMinutes")) || 1440)
 
   await db
     .update(projects)

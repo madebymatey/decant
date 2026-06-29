@@ -6,16 +6,15 @@ import type { Project } from "@/db/schema"
 import { Card, CardBody, CardHeader, Field } from "@/components/ui"
 import { SubmitButton } from "@/components/SubmitButton"
 
+// The central scheduler runs once a day (see vercel.json cron), so daily is the
+// finest cadence that can actually be honoured. Add sub-daily options back here
+// only if the cron in vercel.json is made more frequent (needs Vercel Pro).
 const INTERVALS = [
-  { value: 15, label: "Every 15 minutes" },
-  { value: 30, label: "Every 30 minutes" },
-  { value: 60, label: "Hourly" },
-  { value: 180, label: "Every 3 hours" },
-  { value: 360, label: "Every 6 hours" },
-  { value: 720, label: "Every 12 hours" },
   { value: 1440, label: "Daily" },
+  { value: 2880, label: "Every 2 days" },
   { value: 4320, label: "Every 3 days" },
   { value: 10080, label: "Weekly" },
+  { value: 20160, label: "Every 2 weeks" },
 ]
 
 export function SchedulePanel({ project }: { project: Project }) {
@@ -26,8 +25,8 @@ export function SchedulePanel({ project }: { project: Project }) {
       <CardHeader>
         <h2 className="text-sm font-medium">Scheduled sync</h2>
         <p className="mt-0.5 text-xs text-muted">
-          Runs are dispatched by a central scheduler that checks every 15 minutes, so the true
-          cadence rounds to that tick.
+          A central scheduler runs once a day (06:00 UTC) and syncs whichever projects are due, so
+          daily is the finest cadence. Use “Sync now” for anything more immediate.
         </p>
       </CardHeader>
       <form action={formAction}>
