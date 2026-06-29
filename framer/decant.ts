@@ -242,6 +242,11 @@ export function removeFromCart(id: string | number): void {
   writeCart(readCart().filter((i) => String(i.id) !== key))
 }
 
+/** Empty the cart (e.g. after a successful checkout). */
+export function clearCart(): void {
+  writeCart([])
+}
+
 // ---------- per-line item context ----------
 // React Context lets CartProductList give each rendered row its own cart item,
 // which the row's code components (quantity, subtotal, remove, image) read via
