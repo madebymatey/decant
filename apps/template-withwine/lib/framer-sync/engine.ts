@@ -224,6 +224,7 @@ export async function syncToFramer(): Promise<SyncResult> {
     // Products, with each option linked as a reference (by item id).
     const productsCol = await ensureCollection(framer, COLLECTION_NAMES.products)
     const pf = await ensureFields(productsCol, [
+      { type: "string", name: "Product ID" },
       { type: "string", name: "Name" },
       { type: "string", name: "Description" },
       { type: "number", name: "Price" },
@@ -244,6 +245,7 @@ export async function syncToFramer(): Promise<SyncResult> {
       products.map((p) => ({
         slug: p.slug,
         fieldData: compact({
+          [pf.get("Product ID")!]: str(p.id),
           [pf.get("Name")!]: str(p.name),
           [pf.get("Description")!]: str(p.description),
           [pf.get("Price")!]: num(p.price),
