@@ -1,0 +1,187 @@
+"use server"
+
+import { revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
+import { eq } from "drizzle-orm"
+import { db } from "@/db"
+import { projects, collectionMappings, type FieldOverride } from "@/db/schema"
+import { requireUser } from "@/lib/guards"
+import { getProjectById, getProjectBySlug, setSecret, type SecretName } from "@/lib/projects"
+import { executeSync, computeNextSync } from "@/lib/sync/run"
+import { isValidSlug, toSlug } from "@/lib/slug"
+
+function str(form: FormData, key: string): string {
+  return (form.get(key) ?? "").toString().trim()
+}
+
+export type ActionState = { error?: string; ok?: boolean }
+
+// ── Create ────────────────────────────────────────────────────────────────────
+
+export async function createProjectAction(
+  _prev: ActionState,
+  form: FormData
+): Promise<ActionState> {
+  const session = await requireUser()
+
+  const name = str(form, "name")
+  if (!name) return { error: "Name is required." }
+
+  const slug = str(form, "slug") || toSlug(name)
+  if (!isValidSlug(slug)) {
+    return { error: "Slug must be lowercase letters, numbers and dashes, and not reserved." }
+  }
+  if (await getProjectBySlug(slug)) {
+    return { error: `A project with slug "${slug}" already exists.` }
+  }
+
+  const platformApiKey = str(form, "platformApiKey")
+  const framerApiKey = str(form, "framerApiKey")
+  const feedKey = str(form, "feedKey")
+
+  const [created] = await db
+    .insert(projects)
+    .values({
+      slug,
+      name,
+      clientName: str(form, "clientName") || null,
+      integration: "withwine",
+      platformStoreId: str(form, "platformStoreId") || null,
+      platformApiUrl: str(form, "platformApiUrl") || null,
+      platformAssetUrl: str(form, "platformAssetUrl") || null,
+      currency: str(form, "currency") || "USD",
+      locale: str(form, "locale") || "en-US",
+      framerProjectUrl: str(form, "framerProjectUrl") || null,
+      createdBy: session.user.email ?? session.user.id,
+    })
+    .returning({ id: projects.id })
+
+  if (platformApiKey) await setSecret(created.id, "platformApiKey", platformApiKey)
+  if (framerApiKey) await setSecret(created.id, "framerApiKey", framerApiKey)
+  if (feedKey) await setSecret(created.id, "feedKey", feedKey)
+
+  revalidatePath("/")
+  redirect(`/projects/${slug}`)
+}
+
+// ── Update config ─────────────────────────────────────────────────────────────
+
+export async function updateProjectAction(
+  _prev: ActionState,
+  form: FormData
+): Promise<ActionState> {
+  await requireUser()
+  const id = str(form, "projectId")
+  const project = await getProjectById(id)
+  if (!project) return { error: "Project not found." }
+
+  await db
+    .update(projects)
+    .set({
+      name: str(form, "name") || project.name,
+      clientName: str(form, "clientName") || null,
+      platformStoreId: str(form, "platformStoreId") || null,
+      platformApiUrl: str(form, "platformApiUrl") || null,
+      platformAssetUrl: str(form, "platformAssetUrl") || null,
+      currency: str(form, "currency") || "USD",
+      locale: str(form, "locale") || "en-US",
+      framerProjectUrl: str(form, "framerProjectUrl") || null,
+      updatedAt: new Date(),
+    })
+    .where(eq(projects.id, id))
+
+  // Only overwrite secrets when a new value is supplied.
+  for (const name of ["platformApiKey", "framerApiKey", "feedKey"] as SecretName[]) {
+    const v = str(form, name)
+    if (v) await setSecret(id, name, v)
+  }
+
+  revalidatePath(`/projects/${project.slug}`)
+  return { ok: true }
+}
+
+// ── Schedule ──────────────────────────────────────────────────────────────────
+
+export async function updateScheduleAction(
+  _prev: ActionState,
+  form: FormData
+): Promise<ActionState> {
+  await requireUser()
+  const id = str(form, "projectId")
+  const project = await getProjectById(id)
+  if (!project) return { error: "Project not found." }
+
+  const enabled = form.get("scheduleEnabled") === "on"
+  const intervalMinutes = Math.max(15, Number(str(form, "scheduleIntervalMinutes")) || 1440)
+
+  await db
+    .update(projects)
+    .set({
+      scheduleEnabled: enabled,
+      scheduleIntervalMinutes: intervalMinutes,
+      nextSyncAt: enabled ? computeNextSync(intervalMinutes) : null,
+      updatedAt: new Date(),
+    })
+    .where(eq(projects.id, id))
+
+  revalidatePath(`/projects/${project.slug}`)
+  return { ok: true }
+}
+
+// ── Manual sync ───────────────────────────────────────────────────────────────
+
+export async function triggerSyncAction(form: FormData): Promise<void> {
+  const session = await requireUser()
+  const id = str(form, "projectId")
+  const project = await getProjectById(id)
+  if (!project) return
+  await executeSync(id, "manual", session.user.email ?? session.user.id)
+  revalidatePath(`/projects/${project.slug}`)
+}
+
+// ── Collection mapping ────────────────────────────────────────────────────────
+
+export async function saveMappingAction(
+  _prev: ActionState,
+  form: FormData
+): Promise<ActionState> {
+  await requireUser()
+  const id = str(form, "projectId")
+  const project = await getProjectById(id)
+  if (!project) return { error: "Project not found." }
+
+  const source = str(form, "source")
+  const framerCollectionName = str(form, "framerCollectionName")
+  if (!source || !framerCollectionName) return { error: "Source and collection name are required." }
+
+  let fieldOverrides: FieldOverride[] = []
+  const raw = str(form, "fieldOverrides")
+  if (raw) {
+    try {
+      fieldOverrides = JSON.parse(raw) as FieldOverride[]
+    } catch {
+      return { error: "Field overrides must be valid JSON." }
+    }
+  }
+
+  await db
+    .insert(collectionMappings)
+    .values({ projectId: id, source, framerCollectionName, fieldOverrides })
+    .onConflictDoUpdate({
+      target: [collectionMappings.projectId, collectionMappings.source],
+      set: { framerCollectionName, fieldOverrides, updatedAt: new Date() },
+    })
+
+  revalidatePath(`/projects/${project.slug}`)
+  return { ok: true }
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+export async function deleteProjectAction(form: FormData): Promise<void> {
+  await requireUser()
+  const id = str(form, "projectId")
+  await db.delete(projects).where(eq(projects.id, id))
+  revalidatePath("/")
+  redirect("/")
+}
