@@ -41,6 +41,7 @@ describe("toCmsRecord", () => {
         region: "Napa Valley",
         vintage: 2021,
         wineType: "Red",
+        varietal: "Cabernet Sauvignon",
       })
     )
     expect(rec.slug).toBe("estate-cabernet")
@@ -48,8 +49,15 @@ describe("toCmsRecord", () => {
     expect(rec.price).toBe(65)
     expect(rec.image).toBe("https://cdn/x.jpg")
     expect(rec.region).toBe("Napa Valley")
-    expect(rec.varietal).toBe("") // present, never undefined
-    expect(rec.wineType).toBe("Red") // surfaced for CMS filtering
+    expect(rec.wineType).toBe("Red") // display value, matched against Wine Types name
+    expect(rec.varietal).toBe("Cabernet Sauvignon") // display value, matched against Varietals name
+    expect(Object.values(rec).every((v) => v !== undefined)).toBe(true)
+  })
+
+  it("uses empty strings when wineType/varietal are absent", () => {
+    const rec = toCmsRecord(fp({ id: "1", title: "Mystery" }))
+    expect(rec.wineType).toBe("")
+    expect(rec.varietal).toBe("")
     expect(Object.values(rec).every((v) => v !== undefined)).toBe(true)
   })
 })

@@ -19,13 +19,13 @@ export type CmsProductRecord = {
   image: string
   images: string[]
   category: string
+  // Display value (e.g. "Red"), for mapping onto a Framer single-reference
+  // field. FramerSync resolves the reference by matching this against the Wine
+  // Types item's NAME, so we send the human-readable value, not the slug.
   wineType: string
-  // Slugs matching the /api/feed/wine-types and /api/feed/varietals collection
-  // ids, so FramerSync can map these as single-reference fields.
-  wineTypeSlug: string
-  varietalSlug: string
   available: boolean
   vintage: number | null
+  // Display value (e.g. "Cabernet Sauvignon"); matches the Varietals item name.
   varietal: string
   region: string
   appellation: string
@@ -60,8 +60,6 @@ export function toCmsRecord(p: FramerProduct): CmsProductRecord {
     images: p.images,
     category: p.category ?? "",
     wineType: p.wineType ?? "",
-    wineTypeSlug: p.wineType ? slugify(p.wineType) : "",
-    varietalSlug: p.varietal ? slugify(p.varietal) : "",
     available: p.available,
     vintage: p.vintage,
     varietal: p.varietal ?? "",
