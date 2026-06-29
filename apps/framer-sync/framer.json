@@ -1,0 +1,6 @@
+{
+  "id": "decant",
+  "name": "Decant Sync",
+  "modes": ["canvas", "configureManagedCollection", "syncManagedCollection"],
+  "icon": "/icon.svg"
+}
