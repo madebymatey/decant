@@ -4,7 +4,7 @@
 
 import { addPropertyControls, ControlType } from "framer"
 import type { CSSProperties } from "react"
-import { addToCart, type DecantProduct } from "./decant"
+import { addToCart, type DecantProduct } from "./decant.ts"
 
 /** The only fields this card needs. Keep in sync with what the card renders. */
 export const PRODUCT_CARD_FIELDS = [
