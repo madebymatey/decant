@@ -1,6 +1,7 @@
 import "server-only"
 import { randomBytes } from "node:crypto"
 import { eq } from "drizzle-orm"
+import { ConfigSchema } from "@decant/core"
 import { db } from "@/db"
 import { projects } from "@/db/schema"
 import { getProjectById, getSecret, setSecret, type SecretName } from "@/lib/projects"
@@ -39,6 +40,16 @@ export async function provisionProject(
   const project = await getProjectById(projectId)
   if (!project) return { ok: false, error: "Project not found" }
 
+  // The deployed runtime selects its adapter from PLATFORM; reject an unknown
+  // integration here rather than shipping a deploy that crash-loops at boot.
+  const supportedPlatforms = ConfigSchema.shape.platform.options
+  if (!supportedPlatforms.includes(project.integration as (typeof supportedPlatforms)[number])) {
+    return {
+      ok: false,
+      error: `Unsupported integration "${project.integration}". Supported platforms: ${supportedPlatforms.join(", ")}.`,
+    }
+  }
+
   try {
     await db
       .update(projects)
@@ -70,6 +81,7 @@ export async function provisionProject(
     const add = (key: string, value: string | null | undefined) => {
       if (value != null && value !== "") env.push({ key, value: String(value) })
     }
+    add("PLATFORM", project.integration)
     add("PLATFORM_API_KEY", platformApiKey)
     add("PLATFORM_STORE_ID", project.platformStoreId)
     add("PLATFORM_API_URL", project.platformApiUrl)
