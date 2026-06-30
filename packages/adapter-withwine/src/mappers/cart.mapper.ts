@@ -29,7 +29,9 @@ export const mapWwCartToCart = (
       quantity: l.quantity,
       name: l.name ?? undefined,
       image: imageUrl(l.coverPhotoPath ?? l.thumbnailUrl, assetBaseUrl),
-      unitPrice: l.singlePrice ?? l.fullPrice ?? undefined,
+      // Skip a zero singlePrice (mixes/specials normalise null→0) → use fullPrice.
+      unitPrice:
+        [l.singlePrice, l.fullPrice].find((v) => typeof v === "number" && v > 0) ?? undefined,
       lineTotal: l.totalWithOptions ?? l.total ?? undefined,
       available:
         l.stockCount == null

@@ -305,11 +305,16 @@ function mapServerItems(serverItems: any[], local: CartItem[]): CartItem[] {
     const id = String(s.productId)
     const prev = prevById.get(id)
     const m = meta[id]
+    // Prefer the catalog/CMS values (what the product page shows) over the server
+    // cart line: line prices can come back 0 (e.g. mixes normalise null→0) and
+    // lines carry no image. `find(>0)` skips a zero price; `||` skips "" / null.
+    const price =
+      [prev?.price, m?.price, s.unitPrice].find((v) => typeof v === "number" && v > 0) ?? null
     return {
       id,
-      title: s.name ?? prev?.title ?? m?.title,
-      price: s.unitPrice ?? prev?.price ?? m?.price ?? null,
-      image: s.image ?? prev?.image ?? m?.image,
+      title: prev?.title || m?.title || s.name || undefined,
+      price,
+      image: prev?.image || m?.image || s.image || undefined,
       quantity: s.quantity,
     }
   })
