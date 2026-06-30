@@ -5,6 +5,8 @@ export type {
   Availability,
   Cart,
   CartItem,
+  CartLineOption,
+  CartTotals,
   Club,
   Member,
   Order,

@@ -1,6 +1,7 @@
 import type {
   Availability,
   Cart,
+  CartTotals,
   Club,
   Config,
   Member,
@@ -10,7 +11,7 @@ import type {
 } from "@decant/core"
 import { ErrorCode, PlatformError } from "@decant/core"
 import { mapWwAvailabilityToAvailability } from "./mappers/availability.mapper"
-import { mapWwCartToCart } from "./mappers/cart.mapper"
+import { mapWwCartToCart, mapWwPriceToTotals } from "./mappers/cart.mapper"
 import { mapWwClubToClub } from "./mappers/club.mapper"
 import { mapWwMemberToMember } from "./mappers/member.mapper"
 import { mapWwOrderToOrder } from "./mappers/order.mapper"
@@ -109,25 +110,64 @@ export class WithWineAdapter implements PlatformAdapter {
     return order
   }
 
-  async getCart(cartId: string): Promise<Cart> {
-    // TODO(withwine): confirm the cart endpoint (not in the catalog docs).
-    const data = await this.requestJson(
-      "GET",
-      `/api/cart/carts/${encodeURIComponent(cartId)}`
-    )
-    return mapWwCartToCart(data, this.config.currency)
+  /**
+   * Server-synced cart, keyed by the client-generated session id (passed here as
+   * `sessionKey`). Verified live against greenway staging (2026-06-29):
+   *   GET /api/cart?BrandId=<id>&UnauthenticatedSessionId=<sid>
+   */
+  async getCart(sessionKey: string): Promise<Cart> {
+    const params = new URLSearchParams({
+      BrandId: this.config.storeId,
+      UnauthenticatedSessionId: sessionKey,
+    })
+    const data = await this.requestJson("GET", `/api/cart?${params.toString()}`)
+    return mapWwCartToCart(data, sessionKey, this.config.currency, this.config.assetBaseUrl)
   }
 
-  async updateCart(cartId: string, items: Cart["items"]): Promise<Cart> {
-    // TODO(withwine): confirm the cart endpoint (not in the catalog docs).
-    const data = await this.requestJson(
-      "PATCH",
-      `/api/cart/carts/${encodeURIComponent(cartId)}`,
-      {
-        body: JSON.stringify({ items }),
-      }
-    )
-    return mapWwCartToCart(data, this.config.currency)
+  /** POST /api/cart/update — upsert lines (Quantity 0 removes); returns the cart. */
+  async updateCart(sessionKey: string, items: Cart["items"]): Promise<Cart> {
+    const data = await this.requestJson("POST", `/api/cart/update`, {
+      body: JSON.stringify({
+        UnauthenticatedSessionId: sessionKey,
+        BrandId: this.brandId(),
+        IncludeCart: true,
+        Items: items.map(toWwItem),
+      }),
+    })
+    return mapWwCartToCart(data, sessionKey, this.config.currency, this.config.assetBaseUrl)
+  }
+
+  /**
+   * Live totals/tax/shipping for a set of lines. WithWine's price endpoint needs
+   * the items explicitly (it does NOT read the session cart) and surfaces
+   * validation (e.g. "Orders must be shippable in boxes of 6") in `errors`.
+   */
+  async priceCart(sessionKey: string, items: Cart["items"]): Promise<CartTotals> {
+    const data = await this.requestJson("POST", `/api/order/price`, {
+      body: JSON.stringify({
+        BrandId: this.brandId(),
+        UnauthenticatedSessionId: sessionKey,
+        Items: items.map(toWwItem),
+      }),
+    })
+    return mapWwPriceToTotals(data, this.config.currency)
+  }
+
+  /** POST /api/cart/complete — mark the session's cart completed after an order. */
+  async completeCart(sessionKey: string, orderId: string): Promise<void> {
+    await this.requestJson("POST", `/api/cart/complete`, {
+      body: JSON.stringify({
+        UnauthenticatedSessionId: sessionKey,
+        BrandId: this.brandId(),
+        OrderId: orderId,
+      }),
+    })
+  }
+
+  /** BrandId as a number when storeId is numeric (the API expects a number). */
+  private brandId(): number | string {
+    const n = Number(this.config.storeId)
+    return Number.isFinite(n) && this.config.storeId !== "" ? n : this.config.storeId
   }
 
   async getMember(memberId: string): Promise<Member> {
@@ -249,6 +289,27 @@ export class WithWineAdapter implements PlatformAdapter {
       throw new PlatformError(ErrorCode.NETWORK_ERROR, message, PLATFORM)
     }
   }
+}
+
+/** Map a core cart line → the WithWine `Items` payload shape. */
+function toWwItem(item: Cart["items"][number]): Record<string, unknown> {
+  const productId = Number(item.productId)
+  const out: Record<string, unknown> = {
+    ProductId: Number.isFinite(productId) ? productId : item.productId,
+    Quantity: item.quantity,
+  }
+  if (item.options && item.options.length > 0) {
+    out.Options = item.options.map((o) => {
+      const optId = Number(o.productId)
+      return {
+        productId: Number.isFinite(optId) ? optId : o.productId,
+        name: o.name,
+        quantity: o.quantity,
+        forItemQuantityIndex: o.forItemQuantityIndex ?? null,
+      }
+    })
+  }
+  return out
 }
 
 function normalizeHeaders(
