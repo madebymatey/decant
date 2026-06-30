@@ -1,4 +1,14 @@
-import type { Availability, Cart, CartTotals, Club, Member, Order, Product } from "../types"
+import type {
+  Availability,
+  Cart,
+  CartTotals,
+  CheckoutInput,
+  CheckoutResult,
+  Club,
+  Member,
+  Order,
+  Product,
+} from "../types"
 
 export interface PlatformAdapter {
   getProducts(): Promise<Product[]>
@@ -19,4 +29,6 @@ export interface PlatformAdapter {
   priceCart?(cartId: string, items: Cart["items"]): Promise<CartTotals>
   /** Mark the platform cart completed once an order has been placed. */
   completeCart?(cartId: string, orderId: string): Promise<void>
+  /** Build a hosted-checkout handoff (a URL the browser redirects to). */
+  createCheckout?(input: CheckoutInput): Promise<CheckoutResult>
 }

@@ -66,6 +66,15 @@ export function SettingsPanel({
               <Field label={ix.assetUrl.label} hint={ix.assetUrl.hint}>
                 <Input name="platformAssetUrl" defaultValue={project.platformAssetUrl ?? ""} />
               </Field>
+              {ix.storefrontUrl ? (
+                <Field label={ix.storefrontUrl.label} hint={ix.storefrontUrl.hint}>
+                  <Input
+                    name="platformStorefrontUrl"
+                    defaultValue={project.platformStorefrontUrl ?? ""}
+                    placeholder={ix.storefrontUrl.placeholder}
+                  />
+                </Field>
+              ) : null}
               <Field label="Framer project URL">
                 <Input name="framerProjectUrl" defaultValue={project.framerProjectUrl ?? ""} />
               </Field>

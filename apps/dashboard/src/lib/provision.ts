@@ -86,6 +86,7 @@ export async function provisionProject(
     add("PLATFORM_STORE_ID", project.platformStoreId)
     add("PLATFORM_API_URL", project.platformApiUrl)
     add("PLATFORM_ASSET_URL", project.platformAssetUrl)
+    add("PLATFORM_STOREFRONT_URL", project.platformStorefrontUrl)
     add("PLATFORM_CURRENCY", project.currency)
     add("PLATFORM_LOCALE", project.locale)
     add("FRAMER_API_KEY", framerApiKey)

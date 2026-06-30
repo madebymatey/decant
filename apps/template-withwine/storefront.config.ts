@@ -22,6 +22,7 @@ export const resolvedConfig = defineConfig({
   apiKey: process.env.PLATFORM_API_KEY ?? "demo-secret",
   apiUrl: process.env.PLATFORM_API_URL,
   assetBaseUrl: process.env.PLATFORM_ASSET_URL,
+  storefrontUrl: process.env.PLATFORM_STOREFRONT_URL,
   currency: process.env.PLATFORM_CURRENCY ?? "USD",
   locale: process.env.PLATFORM_LOCALE ?? "en-US",
 })

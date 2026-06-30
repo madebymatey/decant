@@ -21,6 +21,7 @@ export const C7ProductSchema = z.object({
   variants: z
     .array(
       z.object({
+        sku: z.string().nullable().optional(),
         price: z.number().nullable().optional(),
         comparePrice: z.number().nullable().optional(),
       })

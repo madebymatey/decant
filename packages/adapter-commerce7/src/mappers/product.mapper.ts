@@ -49,7 +49,8 @@ export const mapC7ProductToProduct = (raw: unknown, currency: string): Product =
     compareAtPrice,
     currency,
     images: img ? [img] : undefined,
-    sku: p.slug,
+    // Commerce7's hosted checkout (`addToCart`) is keyed on the variant SKU.
+    sku: v?.sku ?? p.slug,
     slug: p.slug,
     available: p.webStatus != null ? p.webStatus === "Available" : undefined,
     wine: hasWine ? wine : undefined,

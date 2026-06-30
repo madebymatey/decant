@@ -149,6 +149,11 @@ function CatalogSection({ descriptor }: { descriptor: IntegrationDescriptor }) {
             <Input name="platformAssetUrl" placeholder={descriptor.assetUrl.placeholder} />
           </Field>
         </div>
+        {descriptor.storefrontUrl ? (
+          <Field label={descriptor.storefrontUrl.label} hint={descriptor.storefrontUrl.hint}>
+            <Input name="platformStorefrontUrl" placeholder={descriptor.storefrontUrl.placeholder} />
+          </Field>
+        ) : null}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Currency">
             <Select name="currency" defaultValue={descriptor.defaults.currency}>

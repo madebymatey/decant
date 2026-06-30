@@ -41,6 +41,8 @@ export type IntegrationDescriptor = {
   apiKey: FieldCopy
   apiUrl: FieldCopy
   assetUrl: FieldCopy
+  /** Present only for platforms that hand off to a hosted checkout (Commerce7). */
+  storefrontUrl?: FieldCopy
   defaults: { currency: string; locale: string }
 }
 
@@ -83,6 +85,11 @@ export const INTEGRATIONS: Record<IntegrationId, IntegrationDescriptor> = {
       placeholder: "https://api.commerce7.com/v1",
     },
     assetUrl: { label: "Asset base URL", hint: "Optional — leave blank if image URLs are absolute." },
+    storefrontUrl: {
+      label: "Storefront URL",
+      hint: "Your Commerce7-powered storefront — used for the hosted-checkout handoff.",
+      placeholder: "https://shop.winery.com",
+    },
     defaults: { currency: "USD", locale: "en-US" },
   },
   orderport: {

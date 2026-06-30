@@ -2,6 +2,8 @@ import type {
   Availability,
   Cart,
   CartTotals,
+  CheckoutInput,
+  CheckoutResult,
   Club,
   Config,
   Member,
@@ -198,6 +200,33 @@ export class WithWineAdapter implements PlatformAdapter {
       `/api/product/availability/${encodeURIComponent(productId)}`
     )
     return mapWwAvailabilityToAvailability(data, productId)
+  }
+
+  /**
+   * WithWine's order is fully URL-driven: `productIds`/`quantities` (parallel
+   * CSV arrays) define the cart on the hosted checkout, with optional
+   * shipping-estimate prefills. No server cart is required.
+   */
+  async createCheckout(input: CheckoutInput): Promise<CheckoutResult> {
+    const lines = (input.items ?? [])
+      .map((i) => ({
+        id: String(i.id ?? "").trim(),
+        quantity: Math.max(1, Math.floor(Number(i.quantity) || 0)),
+      }))
+      .filter((i) => i.id && i.quantity > 0)
+    if (lines.length === 0) {
+      throw new PlatformError(ErrorCode.VALIDATION_ERROR, "Cart is empty", PLATFORM)
+    }
+
+    const params = new URLSearchParams()
+    params.set("productIds", lines.map((i) => i.id).join(","))
+    params.set("quantities", lines.map((i) => i.quantity).join(","))
+    if (input.country) params.set("country", String(input.country))
+    if (input.stateId != null && input.stateId !== "") params.set("stateId", String(input.stateId))
+    if (input.postcode) params.set("postcode", String(input.postcode))
+    if (input.sessionKey) params.set("sessionKey", String(input.sessionKey))
+
+    return { url: `${this.requireBase()}/WithWineOrder/Checkout/?${params.toString()}` }
   }
 
   private mapOptions(): MapProductOptions {

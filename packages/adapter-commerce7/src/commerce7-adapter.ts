@@ -2,6 +2,8 @@ import { Buffer } from "node:buffer"
 import type {
   Availability,
   Cart,
+  CheckoutInput,
+  CheckoutResult,
   Club,
   Config,
   Member,
@@ -112,6 +114,45 @@ export class Commerce7Adapter implements PlatformAdapter {
       `/availability/${encodeURIComponent(productId)}`
     )
     return mapC7AvailabilityToAvailability(data, productId)
+  }
+
+  /**
+   * Commerce7 hosted-checkout handoff: append `addToCart=<sku>&quantity=<n>`
+   * pairs (one per line) plus `checkout=true` to the storefront base, so
+   * Commerce7 owns payment, tax and state-level alcohol compliance.
+   *
+   * Keyed on the variant SKU (what `addToCart` expects). Multi-line repetition
+   * follows the documented single-item params applied per line — verify against
+   * the live storefront if a winery's cart behaves unexpectedly.
+   */
+  async createCheckout(input: CheckoutInput): Promise<CheckoutResult> {
+    const base = this.config.storefrontUrl?.replace(/\/$/, "")
+    if (!base) {
+      throw new PlatformError(
+        ErrorCode.VALIDATION_ERROR,
+        "Commerce7 checkout requires a storefront URL (set PLATFORM_STOREFRONT_URL).",
+        "commerce7"
+      )
+    }
+    const lines = (input.items ?? [])
+      .map((i) => ({
+        sku: String(i.sku ?? i.id ?? "").trim(),
+        quantity: Math.max(1, Math.floor(Number(i.quantity) || 0)),
+      }))
+      .filter((i) => i.sku && i.quantity > 0)
+    if (lines.length === 0) {
+      throw new PlatformError(ErrorCode.VALIDATION_ERROR, "Cart is empty", "commerce7")
+    }
+
+    const params = new URLSearchParams()
+    for (const l of lines) {
+      params.append("addToCart", l.sku)
+      params.append("quantity", String(l.quantity))
+    }
+    params.set("checkout", "true")
+    if (input.sessionKey) params.set("meta-sessionKey", String(input.sessionKey))
+
+    return { url: `${base}/?${params.toString()}` }
   }
 
   private requireBase(): string {

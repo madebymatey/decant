@@ -98,10 +98,12 @@ export const projects = pgTable("project", {
   /** Integration type. Only 'withwine' for now. */
   integration: text("integration").notNull().default("withwine"),
 
-  // Platform (WithWine) config — non-secret.
+  // Platform config — non-secret.
   platformStoreId: text("platformStoreId"),
   platformApiUrl: text("platformApiUrl"),
   platformAssetUrl: text("platformAssetUrl"),
+  /** Public storefront base for hosted-checkout handoff (e.g. Commerce7). */
+  platformStorefrontUrl: text("platformStorefrontUrl"),
   currency: text("currency").notNull().default("USD"),
   locale: text("locale").notNull().default("en-US"),
 
