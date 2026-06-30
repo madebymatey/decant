@@ -191,7 +191,12 @@ export function useCartDrawer() {
   return { open, openCart, closeCart, toggleCart }
 }
 
-// ---------- cart (localStorage) ----------
+// ---------- cart (server-synced, localStorage as cache/fallback) ----------
+//
+// The cart lives on WithWine (via the /api/cart proxy), keyed by an anonymous
+// session id we generate and hold in localStorage. localStorage is an optimistic
+// cache: every mutation updates it instantly (snappy UI + offline/demo fallback)
+// and fires a background server upsert; the server response reconciles the cache.
 
 export type CartItem = {
   id: string
@@ -203,6 +208,20 @@ export type CartItem = {
 
 const CART_KEY = "decant.cart.v1"
 const CART_EVENT = "decant:cart"
+const SESSION_KEY = "decant.sessionKey.v1"
+
+/** Stable anonymous session id — the key the WithWine cart is stored under. */
+export function getSessionKey(): string {
+  if (typeof window === "undefined") return ""
+  let sid = window.localStorage.getItem(SESSION_KEY)
+  if (!sid) {
+    sid =
+      (typeof crypto !== "undefined" && crypto.randomUUID && crypto.randomUUID()) ||
+      `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    window.localStorage.setItem(SESSION_KEY, sid)
+  }
+  return sid
+}
 
 function readCart(): CartItem[] {
   if (typeof window === "undefined") return []
@@ -216,6 +235,71 @@ function writeCart(items: CartItem[]): void {
   window.dispatchEvent(new CustomEvent(CART_EVENT))
 }
 
+/** Authed (token + origin) fetch against the cart proxy. */
+async function cartRequest(baseUrl: string, path: string, init?: RequestInit): Promise<any> {
+  const token = await getToken(baseUrl)
+  const res = await fetch(`${trimSlash(baseUrl)}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...(init?.headers as Record<string, string> | undefined),
+    },
+  })
+  if (!res.ok) throw new Error(`${path} failed (${res.status})`)
+  return res.json()
+}
+
+/** Merge the authoritative server cart into the local cache, keeping title/image
+ * from the cache when the server line omits them (cart lines have no image). */
+function mapServerItems(serverItems: any[], local: CartItem[]): CartItem[] {
+  const prevById = new Map(local.map((i) => [String(i.id), i]))
+  return serverItems.map((s) => {
+    const id = String(s.productId)
+    const prev = prevById.get(id)
+    return {
+      id,
+      title: s.name ?? prev?.title,
+      price: s.unitPrice ?? prev?.price ?? null,
+      image: s.image ?? prev?.image,
+      quantity: s.quantity,
+    }
+  })
+}
+
+/** Upsert one line's absolute quantity on the server (0 removes), then reconcile.
+ * No-op (local-only) when there's no baseUrl or the request fails. */
+function syncLine(productId: string, quantity: number): void {
+  const baseUrl = getGlobalConfig().baseUrl
+  const sessionKey = getSessionKey()
+  if (!baseUrl || !sessionKey) return
+  void cartRequest(baseUrl, "/api/cart/update", {
+    method: "POST",
+    body: JSON.stringify({ sessionKey, items: [{ productId, quantity }] }),
+  })
+    .then((cart) => {
+      if (cart && Array.isArray(cart.items)) writeCart(mapServerItems(cart.items, readCart()))
+    })
+    .catch(() => { /* keep the optimistic local state */ })
+}
+
+/** Load the server cart on mount; seed it from localStorage if the server is empty. */
+async function pullCart(): Promise<void> {
+  const baseUrl = getGlobalConfig().baseUrl
+  const sessionKey = getSessionKey()
+  if (!baseUrl || !sessionKey) return
+  try {
+    const cart = await cartRequest(baseUrl, `/api/cart?sessionKey=${encodeURIComponent(sessionKey)}`)
+    const serverItems = cart && Array.isArray(cart.items) ? cart.items : []
+    const local = readCart()
+    if (serverItems.length > 0) {
+      writeCart(mapServerItems(serverItems, local))
+    } else if (local.length > 0) {
+      for (const i of local) syncLine(String(i.id), i.quantity) // seed server from cache
+    }
+  } catch { /* local-only fallback */ }
+}
+
 export function addToCart(
   product: { id: string | number; title?: string; price?: number | null; image?: string },
   quantity = 1
@@ -223,28 +307,34 @@ export function addToCart(
   const id = String(product.id)
   const items = readCart()
   const existing = items.find((i) => String(i.id) === id)
-  if (existing) { existing.quantity += quantity }
-  else { items.push({ id, title: product.title, price: product.price ?? null, image: product.image, quantity }) }
+  const newQty = (existing?.quantity ?? 0) + quantity
+  if (existing) { existing.quantity = newQty }
+  else { items.push({ id, title: product.title, price: product.price ?? null, image: product.image, quantity: newQty }) }
   writeCart(items)
+  syncLine(id, newQty)
 }
 
 export function setQuantity(id: string | number, quantity: number): void {
   const key = String(id)
   const items = readCart()
   const item = items.find((i) => String(i.id) === key)
-  if (!item) return
+  if (!item && quantity > 0) return
   if (quantity <= 0) writeCart(items.filter((i) => String(i.id) !== key))
-  else { item.quantity = quantity; writeCart(items) }
+  else { item!.quantity = quantity; writeCart(items) }
+  syncLine(key, Math.max(0, quantity))
 }
 
 export function removeFromCart(id: string | number): void {
   const key = String(id)
   writeCart(readCart().filter((i) => String(i.id) !== key))
+  syncLine(key, 0)
 }
 
-/** Empty the cart (e.g. after a successful checkout). */
+/** Empty the cart (e.g. after a successful checkout) locally and on the server. */
 export function clearCart(): void {
+  const ids = readCart().map((i) => String(i.id))
   writeCart([])
+  for (const id of ids) syncLine(id, 0)
 }
 
 // ---------- per-line item context ----------
@@ -286,11 +376,13 @@ export async function checkout(baseUrl?: string, opts: CheckoutOptions = {}): Pr
   const url = baseUrl || getGlobalConfig().baseUrl
   const items = readCart().map((i) => ({ id: i.id, quantity: i.quantity }))
   if (items.length === 0) return
+  const sessionKey = getSessionKey()
   const token = await getToken(url)
   const res = await fetch(`${trimSlash(url)}/api/checkout`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ items, ...opts }),
+    // sessionKey rides along so the hosted checkout links back to this cart.
+    body: JSON.stringify({ items, sessionKey, ...opts }),
   })
   if (!res.ok) throw new Error(`checkout failed (${res.status}): ${await res.text()}`)
   const { url: checkoutUrl } = (await res.json()) as { url: string }
@@ -305,13 +397,15 @@ export function useCart(baseUrl?: string) {
   useEffect(() => {
     const sync = () => setItems(readCart())
     sync()
+    // Reconcile with the server cart once the base URL is known.
+    if (resolvedUrl) void pullCart().then(sync)
     window.addEventListener(CART_EVENT, sync)
     window.addEventListener("storage", sync)
     return () => {
       window.removeEventListener(CART_EVENT, sync)
       window.removeEventListener("storage", sync)
     }
-  }, [])
+  }, [resolvedUrl])
 
   const count = items.reduce((n, i) => n + i.quantity, 0)
   const total = items.reduce((s, i) => s + (i.price ?? 0) * i.quantity, 0)

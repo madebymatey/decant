@@ -24,6 +24,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse): Promise<void>
     country?: string
     stateId?: string | number
     postcode?: string
+    sessionKey?: string
   }
 
   const lines = (Array.isArray(body.items) ? body.items : [])
@@ -47,6 +48,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse): Promise<void>
   if (body.country) params.set("country", String(body.country))
   if (body.stateId != null && body.stateId !== "") params.set("stateId", String(body.stateId))
   if (body.postcode) params.set("postcode", String(body.postcode))
+  // Links the hosted checkout back to the server-synced cart (abandoned-cart
+  // tracking / completion). Verified the checkout shell accepts it (2026-06-29).
+  if (body.sessionKey) params.set("sessionKey", String(body.sessionKey))
 
   res.status(200).json({ url: `${base}/WithWineOrder/Checkout/?${params.toString()}` })
 }

@@ -103,10 +103,17 @@ per pack, so a line is `{productId, quantity, option}` not just `{productId, qty
 - **Phase C — middleware proxy. ✓ DONE.** Token+origin-gated
   `apps/template-withwine/pages/api/cart/{index,update,price,complete}.ts` keep the
   clientId server-side; demo mode returns a client-only cart.
-- **Phase D — Framer cart.** Server-backed `useCart` + sessionKey + optimistic UI +
-  pack/option selection.
-- **Phase E — checkout completion.** `sessionKey` in the checkout URL +
-  `/api/cart/complete` on success.
+- **Phase D — Framer cart. ✓ DONE.** `framer/decant.ts`: `getSessionKey()` (UUID in
+  localStorage); cart mutations optimistically update the cache then `syncLine()`
+  upserts to `/api/cart/update` and reconciles; `useCart` `pullCart()`s the server
+  cart on mount (seeds from cache if server is empty). Same exported API (plain
+  stepper, client-side subtotal) so the cart components are unchanged. Degrades to
+  local-only when there's no baseUrl or a request fails. **NOTE: re-paste decant.ts
+  into Framer to take effect.**
+- **Phase E — checkout completion.** ✓ `sessionKey` now rides the checkout URL
+  (`checkout()` sends it; `/api/checkout` appends `&sessionKey=`). **Remaining:** call
+  `/api/cart/complete` on the `CheckoutSuccess?oid=` return (cart `clearCart()` already
+  zeroes the server lines, but an explicit complete with the OrderId is cleaner).
 - **Phase F — members (later).** Login + `/api/cart/merge` (anon→member).
 
 ## Open questions
@@ -115,10 +122,15 @@ per pack, so a line is `{productId, quantity, option}` not just `{productId, qty
    does `sessionKey` in the checkout URL auto-complete the REST cart, or must we
    call `POST /api/cart/complete {…, OrderId}` on `CheckoutSuccess`? Plan for the
    latter (we control it) and treat auto-complete as a bonus if confirmed.
-2. **Pack/option model** — `order/price` enforces "boxes of 6", and lines carry
-   `halfDozenPrice`/`dozenPrice` + `minimumUnitPurchase`. The cart UX must let users
-   pick/validate packs. Need a **multi-pack product** to confirm the `Options`
-   payload shape (the test wine was single-only). This is the biggest UI change.
+2. **Pack/box validation — DESCOPED for v1 (decision 2026-06-29).** WithWine's
+   hosted checkout already warns/enforces the box-of-6 rule, so the Framer cart
+   stays a **plain quantity stepper** — no pack selector, no blocking validation.
+   Consequence: do NOT use `priceCart` (`/api/order/price`) for in-cart totals (it
+   returns the box-of-6 *error* instead of totals on invalid qty); show a simple
+   client-side estimate (`unitPrice × qty`) and let WithWine do the real
+   tax/shipping/validation at checkout. `priceCart` stays in the adapter for later.
+   Future nice-to-have: a pack selector to reduce checkout bounce (needs the
+   multi-pack `Options` shape confirmed — test wine was single-only).
 3. **Abandoned-cart reporting** — surfaced in the WithWine winery backend, or does
    the CTO want a webhook/report on our side? (Likely WithWine-side; confirm.)
 4. **Migration** — seed the server cart from any existing localStorage cart on first
