@@ -13,9 +13,9 @@ import { syncToFramer } from "../../../lib/framer-sync/engine"
  * identical.
  */
 export const config = {
-  // Headless sync over a WebSocket can take a while; allow a long run.
-  // Effective cap depends on your Vercel plan.
-  maxDuration: 300,
+  // Headless sync over a WebSocket can take a while. Capped at 60s for the Vercel
+  // Hobby plan (a ~50-product sync runs in well under that).
+  maxDuration: 60,
 }
 
 export default async function handler(

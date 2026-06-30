@@ -74,12 +74,22 @@ export function SettingsPanel({
               <p className="text-[13px] font-medium text-muted">Deployment</p>
               <Field
                 label="Deploy URL"
-                hint="The project's own deployment that runs the sync + serves feeds."
+                hint="The project's own deployment that runs the sync + serves feeds. Auto-set when you provision from the Deploy tab."
               >
                 <Input
                   name="deployUrl"
                   defaultValue={project.deployUrl ?? ""}
                   placeholder="https://withwine-dev.vercel.app"
+                />
+              </Field>
+              <Field
+                label="Allowed origins"
+                hint="CSV of Framer site origins allowed to call the runtime (CORS). Blank = allow Framer editor/preview. Pushed to the deploy on provision."
+              >
+                <Input
+                  name="allowedOrigins"
+                  defaultValue={project.allowedOrigins ?? ""}
+                  placeholder="https://withwine.framer.website"
                 />
               </Field>
               <Field

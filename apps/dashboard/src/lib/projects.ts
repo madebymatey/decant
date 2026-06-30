@@ -11,7 +11,12 @@ import {
 } from "@/db/schema"
 import { decryptSecret, encryptSecret } from "@/lib/crypto"
 
-export type SecretName = "platformApiKey" | "framerApiKey" | "feedKey" | "syncKey"
+export type SecretName =
+  | "platformApiKey"
+  | "framerApiKey"
+  | "feedKey"
+  | "syncKey"
+  | "tokenSecret"
 
 export async function listProjects(): Promise<Project[]> {
   return db.select().from(projects).orderBy(desc(projects.createdAt))

@@ -111,8 +111,11 @@ export const projects = pgTable("project", {
   // Per-project deployment (the data plane that runs the sync + serves feeds).
   deployUrl: text("deployUrl"),
   vercelProjectId: text("vercelProjectId"),
+  deploymentId: text("deploymentId"),
   deployStatus: text("deployStatus").notNull().default("none"),
   lastDeployedAt: timestamp("lastDeployedAt"),
+  /** CSV of exact allowed Framer origins for the runtime CORS gate. */
+  allowedOrigins: text("allowedOrigins"),
 
   // Scheduling.
   scheduleEnabled: boolean("scheduleEnabled").notNull().default(false),

@@ -61,6 +61,7 @@ export async function createProjectAction(
       locale: str(form, "locale") || "en-US",
       framerProjectUrl: framerProjectUrl || null,
       deployUrl: deployUrl || null,
+      allowedOrigins: str(form, "allowedOrigins") || null,
       createdBy: session.user.email ?? session.user.id,
     })
     .returning({ id: projects.id })
@@ -102,6 +103,7 @@ export async function updateProjectAction(
       locale: str(form, "locale") || "en-US",
       framerProjectUrl: framerProjectUrl || null,
       deployUrl: str(form, "deployUrl").replace(/\/+$/, "") || null,
+      allowedOrigins: str(form, "allowedOrigins") || null,
       updatedAt: new Date(),
     })
     .where(eq(projects.id, id))

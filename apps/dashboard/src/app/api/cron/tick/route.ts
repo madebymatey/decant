@@ -6,7 +6,9 @@ import { executeSync } from "@/lib/sync/run"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-export const maxDuration = 300
+// Hobby plan caps functions at 60s. The tick fans out to each project's deploy,
+// which does the heavy lifting, so this stays short.
+export const maxDuration = 60
 
 /**
  * GET /api/cron/tick — the single scheduled entrypoint (Vercel Cron).

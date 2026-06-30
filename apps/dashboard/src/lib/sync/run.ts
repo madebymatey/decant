@@ -92,8 +92,9 @@ async function triggerRemoteSync(
       ...(syncKey ? { authorization: `Bearer ${syncKey}` } : {}),
     },
     body: JSON.stringify({ mappings }),
-    // The headless Framer push can take a while.
-    signal: AbortSignal.timeout(280_000),
+    // decant itself runs on Hobby (60s function cap), so wait just under that —
+    // the deploy's own sync is likewise capped at 60s.
+    signal: AbortSignal.timeout(55_000),
   })
 
   const text = await res.text()

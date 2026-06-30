@@ -11,15 +11,17 @@ import {
 import { relativeTime, intervalLabel } from "@/lib/format"
 import { Badge } from "@/components/ui"
 import { cn } from "@/lib/cn"
+import { vercelConfigured } from "@/lib/vercel"
 import { SyncPanel } from "./SyncPanel"
 import { SchedulePanel } from "./SchedulePanel"
 import { FeedsPanel } from "./FeedsPanel"
 import { CollectionsPanel } from "./CollectionsPanel"
 import { SettingsPanel } from "./SettingsPanel"
+import { DeployPanel } from "./DeployPanel"
 
 export const dynamic = "force-dynamic"
 
-const TABS = ["sync", "schedule", "feeds", "collections", "settings"] as const
+const TABS = ["sync", "deploy", "schedule", "feeds", "collections", "settings"] as const
 type Tab = (typeof TABS)[number]
 
 const integrationLabels: Record<string, string> = { withwine: "WithWine" }
@@ -92,6 +94,7 @@ export default async function ProjectPage({
       </div>
 
       {tab === "sync" && <SyncPanel project={project} runs={runs} />}
+      {tab === "deploy" && <DeployPanel project={project} vercelConfigured={vercelConfigured()} />}
       {tab === "schedule" && <SchedulePanel project={project} />}
       {tab === "feeds" && (
         <FeedsPanel

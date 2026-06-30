@@ -15,7 +15,7 @@ import { sendPlatformError } from "../../../lib/respond"
  * automatically, and we reject anything else.
  */
 export const config = {
-  maxDuration: 300,
+  maxDuration: 60,
 }
 
 export default async function handler(
