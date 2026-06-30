@@ -136,16 +136,43 @@ export class Commerce7Adapter implements PlatformAdapter {
     }
     const lines = (input.items ?? [])
       .map((i) => ({
-        sku: String(i.sku ?? i.id ?? "").trim(),
+        id: String(i.id ?? "").trim(),
+        sku: i.sku ? String(i.sku).trim() : "",
         quantity: Math.max(1, Math.floor(Number(i.quantity) || 0)),
       }))
-      .filter((i) => i.sku && i.quantity > 0)
+      .filter((l) => (l.id || l.sku) && l.quantity > 0)
     if (lines.length === 0) {
       throw new PlatformError(ErrorCode.VALIDATION_ERROR, "Cart is empty", "commerce7")
     }
 
+    // `addToCart` keys on the variant SKU. A cart built from the product feed
+    // carries the product id, not the SKU — resolve those lines by fetching the
+    // product so the Framer cart needs no changes.
+    await Promise.all(
+      lines.map(async (l) => {
+        if (!l.sku && l.id) {
+          try {
+            l.sku = (await this.getProduct(l.id)).sku ?? ""
+          } catch {
+            /* leave unresolved; filtered out below */
+          }
+        }
+      })
+    )
+    const usable = lines.filter((l) => l.sku)
+    if (usable.length === 0) {
+      throw new PlatformError(
+        ErrorCode.VALIDATION_ERROR,
+        "Could not resolve a Commerce7 SKU for any cart line — pass `sku` or a valid product id.",
+        "commerce7"
+      )
+    }
+
+    // NOTE: Commerce7's URL handoff is single-product. We emit one addToCart/
+    // quantity pair per line, but Commerce7 may only honour the first — a true
+    // multi-line cart needs the Cart API or its frontend SDK (follow-up).
     const params = new URLSearchParams()
-    for (const l of lines) {
+    for (const l of usable) {
       params.append("addToCart", l.sku)
       params.append("quantity", String(l.quantity))
     }
