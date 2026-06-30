@@ -24,8 +24,8 @@ export function SyncPanel({
 
   return (
     <div className="space-y-4">
-      <SyncActivityChart activity={activity} />
       <SyncNowCard project={project} />
+      <SyncActivityChart activity={activity} />
 
       {lastSuccess?.counts ? (
         <div className="grid grid-cols-3 gap-3">
