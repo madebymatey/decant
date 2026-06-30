@@ -13,6 +13,7 @@ import { relativeTime, intervalLabel } from "@/lib/format"
 import { Badge } from "@/components/ui"
 import { cn } from "@/lib/cn"
 import { vercelConfigured } from "@/lib/vercel"
+import { integrationLabel } from "@/lib/integrations"
 import { SyncPanel } from "./SyncPanel"
 import { SchedulePanel } from "./SchedulePanel"
 import { FeedsPanel } from "./FeedsPanel"
@@ -24,8 +25,6 @@ export const dynamic = "force-dynamic"
 
 const TABS = ["sync", "deploy", "schedule", "feeds", "collections", "settings"] as const
 type Tab = (typeof TABS)[number]
-
-const integrationLabels: Record<string, string> = { withwine: "WithWine" }
 
 export default async function ProjectPage({
   params,
@@ -69,7 +68,7 @@ export default async function ProjectPage({
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <Badge tone="accent">{integrationLabels[project.integration] ?? project.integration}</Badge>
+          <Badge tone="accent">{integrationLabel(project.integration)}</Badge>
           {project.scheduleEnabled ? (
             <Badge tone="success">{intervalLabel(project.scheduleIntervalMinutes)}</Badge>
           ) : (

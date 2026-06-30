@@ -10,6 +10,7 @@ import { getProjectById, getProjectBySlug, setSecret, type SecretName } from "@/
 import { executeSync, computeNextSync } from "@/lib/sync/run"
 import { isValidSlug, toSlug } from "@/lib/slug"
 import { isFramerProjectUrl, normalizeFramerProjectUrl } from "@/lib/framer-url"
+import { isIntegrationId } from "@/lib/integrations"
 
 function str(form: FormData, key: string): string {
   return (form.get(key) ?? "").toString().trim()
@@ -36,6 +37,11 @@ export async function createProjectAction(
     return { error: `A project with slug "${slug}" already exists.` }
   }
 
+  const integration = str(form, "integration") || "withwine"
+  if (!isIntegrationId(integration)) {
+    return { error: `Unsupported integration "${integration}".` }
+  }
+
   const framerProjectUrl = normalizeFramerProjectUrl(str(form, "framerProjectUrl"))
   if (framerProjectUrl && !isFramerProjectUrl(framerProjectUrl)) {
     return { error: "Framer project URL must look like https://framer.com/projects/<Name>--<ID>." }
@@ -53,7 +59,7 @@ export async function createProjectAction(
       slug,
       name,
       clientName: str(form, "clientName") || null,
-      integration: "withwine",
+      integration,
       platformStoreId: str(form, "platformStoreId") || null,
       platformApiUrl: str(form, "platformApiUrl") || null,
       platformAssetUrl: str(form, "platformAssetUrl") || null,

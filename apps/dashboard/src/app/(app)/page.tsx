@@ -3,12 +3,9 @@ import { ArrowUpRight, Plus, Wine } from "lucide-react"
 import { listProjects } from "@/lib/projects"
 import { relativeTime, intervalLabel } from "@/lib/format"
 import { Badge, EmptyState, LinkButton } from "@/components/ui"
+import { integrationLabel } from "@/lib/integrations"
 
 export const dynamic = "force-dynamic"
-
-const integrationLabels: Record<string, string> = {
-  withwine: "WithWine",
-}
 
 export default async function ProjectsPage() {
   const projects = await listProjects()
@@ -66,7 +63,7 @@ export default async function ProjectsPage() {
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
-                <Badge tone="accent">{integrationLabels[p.integration] ?? p.integration}</Badge>
+                <Badge tone="accent">{integrationLabel(p.integration)}</Badge>
                 {p.scheduleEnabled ? (
                   <Badge tone="success">{intervalLabel(p.scheduleIntervalMinutes)}</Badge>
                 ) : (

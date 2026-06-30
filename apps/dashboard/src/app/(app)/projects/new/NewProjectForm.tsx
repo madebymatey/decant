@@ -4,6 +4,12 @@ import { useState } from "react"
 import { useFormState, useFormStatus } from "react-dom"
 import { createProjectAction, type ActionState } from "../actions"
 import { toSlug } from "@/lib/slug"
+import {
+  INTEGRATIONS,
+  INTEGRATION_LIST,
+  type IntegrationDescriptor,
+  type IntegrationId,
+} from "@/lib/integrations"
 import { Button, Card, CardBody, CardHeader, Field, Input } from "@/components/ui"
 import { useActionToast } from "@/components/Toast"
 
@@ -15,6 +21,7 @@ export function NewProjectForm() {
   const [name, setName] = useState("")
   const [slug, setSlug] = useState("")
   const [slugEdited, setSlugEdited] = useState(false)
+  const [integration, setIntegration] = useState<IntegrationId>("withwine")
 
   const effectiveSlug = slugEdited ? slug : toSlug(name)
 
@@ -58,47 +65,22 @@ export function NewProjectForm() {
           <Field label="Integration">
             <select
               name="integration"
-              defaultValue="withwine"
+              value={integration}
+              onChange={(e) => setIntegration(e.target.value as IntegrationId)}
               className="h-9 w-full rounded-md border border-border-strong bg-background px-3 text-sm"
             >
-              <option value="withwine">WithWine</option>
+              {INTEGRATION_LIST.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.label}
+                </option>
+              ))}
             </select>
           </Field>
         </CardBody>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <h2 className="text-sm font-medium">WithWine catalog</h2>
-          <p className="mt-0.5 text-xs text-muted">
-            Credentials are encrypted at rest and never shown again.
-          </p>
-        </CardHeader>
-        <CardBody className="space-y-4">
-          <Field label="Brand / store ID" hint="WithWine WineryBrandId, e.g. 101.">
-            <Input name="platformStoreId" placeholder="101" />
-          </Field>
-          <Field label="Client ID (API key)" hint="Format: brandslug-brandId-secret.">
-            <Input name="platformApiKey" type="password" placeholder="greenway-wines-101-…" />
-          </Field>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="API base URL" hint="Default https://secure.withwine.com">
-              <Input name="platformApiUrl" placeholder="https://stage.withwine.com" />
-            </Field>
-            <Field label="Asset base URL">
-              <Input name="platformAssetUrl" placeholder="https://stage-s3-cdn.withwine.com" />
-            </Field>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Currency">
-              <Input name="currency" defaultValue="AUD" placeholder="AUD" />
-            </Field>
-            <Field label="Locale">
-              <Input name="locale" defaultValue="en-AU" placeholder="en-AU" />
-            </Field>
-          </div>
-        </CardBody>
-      </Card>
+      {/* Remounts on integration change so placeholders + defaults refresh. */}
+      <CatalogSection key={integration} descriptor={INTEGRATIONS[integration]} />
 
       <Card>
         <CardHeader>
@@ -138,6 +120,51 @@ export function NewProjectForm() {
 
       <SubmitBar />
     </form>
+  )
+}
+
+function CatalogSection({ descriptor }: { descriptor: IntegrationDescriptor }) {
+  return (
+    <Card>
+      <CardHeader>
+        <h2 className="text-sm font-medium">{descriptor.catalogHeading}</h2>
+        <p className="mt-0.5 text-xs text-muted">
+          Credentials are encrypted at rest and never shown again.
+        </p>
+      </CardHeader>
+      <CardBody className="space-y-4">
+        <Field label={descriptor.storeId.label} hint={descriptor.storeId.hint}>
+          <Input name="platformStoreId" placeholder={descriptor.storeId.placeholder} />
+        </Field>
+        <Field label={descriptor.apiKey.label} hint={descriptor.apiKey.hint}>
+          <Input name="platformApiKey" type="password" placeholder={descriptor.apiKey.placeholder} />
+        </Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label={descriptor.apiUrl.label} hint={descriptor.apiUrl.hint}>
+            <Input name="platformApiUrl" placeholder={descriptor.apiUrl.placeholder} />
+          </Field>
+          <Field label={descriptor.assetUrl.label} hint={descriptor.assetUrl.hint}>
+            <Input name="platformAssetUrl" placeholder={descriptor.assetUrl.placeholder} />
+          </Field>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Currency">
+            <Input
+              name="currency"
+              defaultValue={descriptor.defaults.currency}
+              placeholder={descriptor.defaults.currency}
+            />
+          </Field>
+          <Field label="Locale">
+            <Input
+              name="locale"
+              defaultValue={descriptor.defaults.locale}
+              placeholder={descriptor.defaults.locale}
+            />
+          </Field>
+        </div>
+      </CardBody>
+    </Card>
   )
 }
 

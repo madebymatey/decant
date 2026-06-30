@@ -4,6 +4,7 @@ import { useFormState } from "react-dom"
 import { updateProjectAction, deleteProjectAction, type ActionState } from "../actions"
 import type { Project } from "@/db/schema"
 import type { SecretName } from "@/lib/projects"
+import { INTEGRATIONS, isIntegrationId } from "@/lib/integrations"
 import { Badge, Card, CardBody, CardHeader, Field, Input } from "@/components/ui"
 import { SubmitButton } from "@/components/SubmitButton"
 import { useActionToast } from "@/components/Toast"
@@ -18,6 +19,9 @@ export function SettingsPanel({
   const [state, formAction] = useFormState(updateProjectAction, {} as ActionState)
   useActionToast(state, { success: "Settings saved" })
   const has = (s: SecretName) => secretsSet.includes(s)
+  const ix = isIntegrationId(project.integration)
+    ? INTEGRATIONS[project.integration]
+    : INTEGRATIONS.withwine
 
   return (
     <div className="space-y-4">
@@ -47,13 +51,13 @@ export function SettingsPanel({
             </Field>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Brand / store ID">
+              <Field label={ix.storeId.label} hint={ix.storeId.hint}>
                 <Input name="platformStoreId" defaultValue={project.platformStoreId ?? ""} />
               </Field>
-              <Field label="API base URL">
+              <Field label={ix.apiUrl.label} hint={ix.apiUrl.hint}>
                 <Input name="platformApiUrl" defaultValue={project.platformApiUrl ?? ""} />
               </Field>
-              <Field label="Asset base URL">
+              <Field label={ix.assetUrl.label} hint={ix.assetUrl.hint}>
                 <Input name="platformAssetUrl" defaultValue={project.platformAssetUrl ?? ""} />
               </Field>
               <Field label="Framer project URL">
@@ -99,7 +103,7 @@ export function SettingsPanel({
 
             <div className="space-y-4 border-t border-border pt-4">
               <Field
-                label="WithWine client ID"
+                label={ix.apiKey.label}
                 hint={has("platformApiKey") ? "Set — leave blank to keep." : "Not set."}
               >
                 <Input name="platformApiKey" type="password" placeholder="••••••••" />
