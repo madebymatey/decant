@@ -122,7 +122,11 @@ export async function fetchProducts(
   const data = (await authedFetch(url, `/api/products${fieldsQuery(opts.fields)}`)) as {
     items?: DecantProduct[]
   }
-  return data.items ?? []
+  const items = data.items ?? []
+  rememberProducts(
+    items.map((p) => ({ id: p.id, title: p.title, image: p.image ?? p.images?.[0], price: p.price ?? null }))
+  )
+  return items
 }
 
 export async function fetchProduct(
@@ -136,7 +140,13 @@ export async function fetchProduct(
     url,
     `/api/products/${encodeURIComponent(id)}${fieldsQuery(opts.fields)}`
   )) as { product?: DecantProduct }
-  return data.product ?? null
+  const product = data.product ?? null
+  if (product) {
+    rememberProducts([
+      { id: product.id, title: product.title, image: product.image ?? product.images?.[0], price: product.price ?? null },
+    ])
+  }
+  return product
 }
 
 export function useProducts(baseUrl?: string, fields: string[] = []) {
@@ -235,6 +245,42 @@ function writeCart(items: CartItem[]): void {
   window.dispatchEvent(new CustomEvent(CART_EVENT))
 }
 
+// Product metadata cache (id -> title/image/price), persisted in localStorage.
+// WithWine cart lines carry no image, so cart rows fall back to this — populated
+// whenever products are browsed or added, and it survives reloads.
+const META_KEY = "decant.productMeta.v1"
+type ProductMeta = { title?: string; image?: string; price?: number | null }
+
+function readMeta(): Record<string, ProductMeta> {
+  if (typeof window === "undefined") return {}
+  try { return JSON.parse(window.localStorage.getItem(META_KEY) ?? "{}") as Record<string, ProductMeta> }
+  catch { return {} }
+}
+
+export function rememberProducts(
+  entries: Array<{ id: string | number; title?: string; image?: string; price?: number | null }>
+): void {
+  if (typeof window === "undefined" || entries.length === 0) return
+  const meta = readMeta()
+  for (const e of entries) {
+    const id = String(e.id)
+    const cur = meta[id] ?? {}
+    meta[id] = {
+      title: e.title ?? cur.title,
+      image: e.image ?? cur.image,
+      price: e.price ?? cur.price ?? null,
+    }
+  }
+  window.localStorage.setItem(META_KEY, JSON.stringify(meta))
+}
+
+// Monotonic version bumped on every user cart mutation. Server responses only
+// apply if the version hasn't advanced since the request was issued — this drops
+// stale / out-of-order responses (e.g. an in-flight GET returning the old
+// quantity after an optimistic change) that would otherwise cause a price flicker.
+function cartVersion(): number { return W().__decantCartVersion ?? 0 }
+function bumpCartVersion(): void { W().__decantCartVersion = cartVersion() + 1 }
+
 /** Authed (token + origin) fetch against the cart proxy. */
 async function cartRequest(baseUrl: string, path: string, init?: RequestInit): Promise<any> {
   const token = await getToken(baseUrl)
@@ -254,14 +300,16 @@ async function cartRequest(baseUrl: string, path: string, init?: RequestInit): P
  * from the cache when the server line omits them (cart lines have no image). */
 function mapServerItems(serverItems: any[], local: CartItem[]): CartItem[] {
   const prevById = new Map(local.map((i) => [String(i.id), i]))
+  const meta = readMeta()
   return serverItems.map((s) => {
     const id = String(s.productId)
     const prev = prevById.get(id)
+    const m = meta[id]
     return {
       id,
-      title: s.name ?? prev?.title,
-      price: s.unitPrice ?? prev?.price ?? null,
-      image: s.image ?? prev?.image,
+      title: s.name ?? prev?.title ?? m?.title,
+      price: s.unitPrice ?? prev?.price ?? m?.price ?? null,
+      image: s.image ?? prev?.image ?? m?.image,
       quantity: s.quantity,
     }
   })
@@ -273,12 +321,16 @@ function syncLine(productId: string, quantity: number): void {
   const baseUrl = getGlobalConfig().baseUrl
   const sessionKey = getSessionKey()
   if (!baseUrl || !sessionKey) return
+  const v = cartVersion()
   void cartRequest(baseUrl, "/api/cart/update", {
     method: "POST",
     body: JSON.stringify({ sessionKey, items: [{ productId, quantity }] }),
   })
     .then((cart) => {
-      if (cart && Array.isArray(cart.items)) writeCart(mapServerItems(cart.items, readCart()))
+      // Ignore if a newer mutation happened while this was in flight.
+      if (cart && Array.isArray(cart.items) && cartVersion() === v) {
+        writeCart(mapServerItems(cart.items, readCart()))
+      }
     })
     .catch(() => { /* keep the optimistic local state */ })
 }
@@ -288,8 +340,11 @@ async function pullCart(): Promise<void> {
   const baseUrl = getGlobalConfig().baseUrl
   const sessionKey = getSessionKey()
   if (!baseUrl || !sessionKey) return
+  const v = cartVersion()
   try {
     const cart = await cartRequest(baseUrl, `/api/cart?sessionKey=${encodeURIComponent(sessionKey)}`)
+    // A mutation raced ahead of this load — let its own sync win, don't revert.
+    if (cartVersion() !== v) return
     const serverItems = cart && Array.isArray(cart.items) ? cart.items : []
     const local = readCart()
     if (serverItems.length > 0) {
@@ -305,6 +360,8 @@ export function addToCart(
   quantity = 1
 ): void {
   const id = String(product.id)
+  rememberProducts([{ id, title: product.title, image: product.image, price: product.price ?? null }])
+  bumpCartVersion()
   const items = readCart()
   const existing = items.find((i) => String(i.id) === id)
   const newQty = (existing?.quantity ?? 0) + quantity
@@ -319,6 +376,7 @@ export function setQuantity(id: string | number, quantity: number): void {
   const items = readCart()
   const item = items.find((i) => String(i.id) === key)
   if (!item && quantity > 0) return
+  bumpCartVersion()
   if (quantity <= 0) writeCart(items.filter((i) => String(i.id) !== key))
   else { item!.quantity = quantity; writeCart(items) }
   syncLine(key, Math.max(0, quantity))
@@ -326,6 +384,7 @@ export function setQuantity(id: string | number, quantity: number): void {
 
 export function removeFromCart(id: string | number): void {
   const key = String(id)
+  bumpCartVersion()
   writeCart(readCart().filter((i) => String(i.id) !== key))
   syncLine(key, 0)
 }
@@ -333,6 +392,7 @@ export function removeFromCart(id: string | number): void {
 /** Empty the cart (e.g. after a successful checkout) locally and on the server. */
 export function clearCart(): void {
   const ids = readCart().map((i) => String(i.id))
+  bumpCartVersion()
   writeCart([])
   for (const id of ids) syncLine(id, 0)
 }
