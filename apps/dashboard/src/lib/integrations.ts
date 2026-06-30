@@ -12,6 +12,25 @@
 export const INTEGRATION_IDS = ["withwine", "commerce7", "orderport"] as const
 export type IntegrationId = (typeof INTEGRATION_IDS)[number]
 
+/** Curated option lists so currency/locale are picked, not typed. */
+export const CURRENCY_OPTIONS = ["USD", "AUD", "CAD", "GBP", "EUR", "NZD"] as const
+export const LOCALE_OPTIONS = [
+  "en-US",
+  "en-AU",
+  "en-GB",
+  "en-CA",
+  "en-NZ",
+  "fr-FR",
+  "fr-CA",
+  "de-DE",
+  "es-ES",
+] as const
+
+/** Option list that always includes `current` (for editing legacy values). */
+export function withOption(options: readonly string[], current?: string | null): string[] {
+  return current && !options.includes(current) ? [current, ...options] : [...options]
+}
+
 type FieldCopy = { label: string; hint?: string; placeholder?: string }
 
 export type IntegrationDescriptor = {
@@ -42,7 +61,7 @@ export const INTEGRATIONS: Record<IntegrationId, IntegrationDescriptor> = {
       placeholder: "https://stage.withwine.com",
     },
     assetUrl: { label: "Asset base URL", placeholder: "https://stage-s3-cdn.withwine.com" },
-    defaults: { currency: "AUD", locale: "en-AU" },
+    defaults: { currency: "USD", locale: "en-US" },
   },
   commerce7: {
     id: "commerce7",

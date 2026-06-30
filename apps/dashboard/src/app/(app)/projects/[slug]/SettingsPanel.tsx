@@ -4,8 +4,14 @@ import { useFormState } from "react-dom"
 import { updateProjectAction, deleteProjectAction, type ActionState } from "../actions"
 import type { Project } from "@/db/schema"
 import type { SecretName } from "@/lib/projects"
-import { INTEGRATIONS, isIntegrationId } from "@/lib/integrations"
-import { Badge, Card, CardBody, CardHeader, Field, Input } from "@/components/ui"
+import {
+  INTEGRATIONS,
+  isIntegrationId,
+  CURRENCY_OPTIONS,
+  LOCALE_OPTIONS,
+  withOption,
+} from "@/lib/integrations"
+import { Badge, Card, CardBody, CardHeader, Field, Input, Select } from "@/components/ui"
 import { SubmitButton } from "@/components/SubmitButton"
 import { useActionToast } from "@/components/Toast"
 
@@ -64,10 +70,22 @@ export function SettingsPanel({
                 <Input name="framerProjectUrl" defaultValue={project.framerProjectUrl ?? ""} />
               </Field>
               <Field label="Currency">
-                <Input name="currency" defaultValue={project.currency} />
+                <Select name="currency" defaultValue={project.currency}>
+                  {withOption(CURRENCY_OPTIONS, project.currency).map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </Select>
               </Field>
               <Field label="Locale">
-                <Input name="locale" defaultValue={project.locale} />
+                <Select name="locale" defaultValue={project.locale}>
+                  {withOption(LOCALE_OPTIONS, project.locale).map((l) => (
+                    <option key={l} value={l}>
+                      {l}
+                    </option>
+                  ))}
+                </Select>
               </Field>
             </div>
 

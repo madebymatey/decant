@@ -7,10 +7,12 @@ import { toSlug } from "@/lib/slug"
 import {
   INTEGRATIONS,
   INTEGRATION_LIST,
+  CURRENCY_OPTIONS,
+  LOCALE_OPTIONS,
   type IntegrationDescriptor,
   type IntegrationId,
 } from "@/lib/integrations"
-import { Button, Card, CardBody, CardHeader, Field, Input } from "@/components/ui"
+import { Button, Card, CardBody, CardHeader, Field, Input, Select } from "@/components/ui"
 import { useActionToast } from "@/components/Toast"
 
 const initial: ActionState = {}
@@ -149,18 +151,22 @@ function CatalogSection({ descriptor }: { descriptor: IntegrationDescriptor }) {
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Currency">
-            <Input
-              name="currency"
-              defaultValue={descriptor.defaults.currency}
-              placeholder={descriptor.defaults.currency}
-            />
+            <Select name="currency" defaultValue={descriptor.defaults.currency}>
+              {CURRENCY_OPTIONS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
           </Field>
           <Field label="Locale">
-            <Input
-              name="locale"
-              defaultValue={descriptor.defaults.locale}
-              placeholder={descriptor.defaults.locale}
-            />
+            <Select name="locale" defaultValue={descriptor.defaults.locale}>
+              {LOCALE_OPTIONS.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </Select>
           </Field>
         </div>
       </CardBody>
