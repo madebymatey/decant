@@ -239,10 +239,41 @@ function accumulate(into: SyncCounts, delta: Delta): void {
   into.deleted += delta.deleted
 }
 
+/** Framer connection budget — under decant's 55s sync abort, far above a healthy ~8s sync. */
+const FRAMER_CONNECT_TIMEOUT_MS = 40_000
+
+const isLikelyFramerProjectUrl = (url: string): boolean =>
+  /^https:\/\/(www\.)?framer\.com\/projects\/.+--.+/i.test(url.trim())
+
+/** Reject `promise` if it doesn't settle within `ms`, with an actionable message. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(
+          new Error(
+            `${label} timed out after ${ms / 1000}s — check FRAMER_PROJECT_URL and FRAMER_API_KEY.`
+          )
+        ),
+      ms
+    )
+  })
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer)
+  })
+}
+
 export async function syncToFramer(options?: { mappings?: MappingInput[] }): Promise<SyncCounts> {
   const projectUrl = process.env.FRAMER_PROJECT_URL
   if (!projectUrl) throw new Error("FRAMER_PROJECT_URL is not set")
   if (!process.env.FRAMER_API_KEY) throw new Error("FRAMER_API_KEY is not set")
+  if (!isLikelyFramerProjectUrl(projectUrl)) {
+    throw new Error(
+      `FRAMER_PROJECT_URL doesn't look like a Framer project URL ` +
+        `(expected https://framer.com/projects/<Name>--<ID>): ${projectUrl}`
+    )
+  }
 
   assertHeaderSafe("FRAMER_PROJECT_URL", process.env.FRAMER_PROJECT_URL)
   assertHeaderSafe("FRAMER_API_KEY", process.env.FRAMER_API_KEY)
@@ -269,7 +300,7 @@ export async function syncToFramer(options?: { mappings?: MappingInput[] }): Pro
 
   const counts = emptyCounts()
 
-  return withConnection(projectUrl, async (framer) => {
+  const run = withConnection(projectUrl, async (framer) => {
     // Option collections first — references need their item ids.
     const wineTypes = await syncOptionCollection(framer, resolved.names.wineTypes, wineTypeBySlug)
     const varietals = await syncOptionCollection(framer, resolved.names.varietals, varietalBySlug)
@@ -348,4 +379,6 @@ export async function syncToFramer(options?: { mappings?: MappingInput[] }): Pro
 
     return counts
   })
+
+  return withTimeout(run, FRAMER_CONNECT_TIMEOUT_MS, "Framer sync")
 }
