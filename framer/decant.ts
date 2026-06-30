@@ -402,6 +402,35 @@ export function clearCart(): void {
   for (const id of ids) syncLine(id, 0)
 }
 
+/** Start the next shopping session under a fresh id. */
+function rotateSessionKey(): void {
+  if (typeof window === "undefined") return
+  window.localStorage.removeItem(SESSION_KEY)
+  getSessionKey() // regenerate
+}
+
+/**
+ * Finalize after a successful order: mark the server cart **completed** (a
+ * conversion, so it's not counted as abandoned), clear the local cart, and start
+ * a fresh session. Best-effort — the local cart clears even if the call fails.
+ * Call on the CheckoutSuccess page with the `?oid=` order id.
+ */
+export async function completeOrder(orderId: string | number, baseUrl?: string): Promise<void> {
+  const url = baseUrl || getGlobalConfig().baseUrl
+  const sessionKey = getSessionKey()
+  bumpCartVersion()
+  writeCart([]) // clear local display immediately
+  if (url && sessionKey && orderId != null && orderId !== "") {
+    try {
+      await cartRequest(url, "/api/cart/complete", {
+        method: "POST",
+        body: JSON.stringify({ sessionKey, orderId: String(orderId) }),
+      })
+    } catch { /* best effort — local cart already cleared */ }
+  }
+  rotateSessionKey()
+}
+
 // ---------- per-line item context ----------
 // React Context lets CartProductList give each rendered row its own cart item,
 // which the row's code components (quantity, subtotal, remove, image) read via

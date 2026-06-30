@@ -1,6 +1,6 @@
 import { addPropertyControls, ControlType } from "framer"
-import { useEffect, useState } from "react"
-import { clearCart } from "./decant.ts"
+import { useEffect, useRef, useState } from "react"
+import { clearCart, completeOrder, useGlobalConfig } from "./decant.ts"
 
 interface Props {
   children?: React.ReactNode
@@ -15,9 +15,9 @@ interface Props {
 /**
  * Drop this on the WithWine CheckoutSuccess page (/CheckoutSuccess?oid=...).
  *
- * On load it CLEARS the site cart — WithWine owns the order from here, and the
- * redirect back doesn't otherwise touch the localStorage cart. It also reads the
- * order id from the `?oid=` query param (no API call needed).
+ * On load it reads the order id from `?oid=` and marks the server cart COMPLETED
+ * (a conversion — so it isn't tracked as abandoned), then clears the local cart.
+ * Falls back to a plain local clear if there's no order id / base URL.
  *
  * Slot your own design into Children for a fully custom page; the cart still
  * clears either way.
@@ -34,14 +34,38 @@ export function CheckoutSuccess({
   accent,
   style,
 }: Props) {
+  const config = useGlobalConfig()
   const [oid, setOid] = useState<string | null>(null)
+  const firedRef = useRef(false)
+
+  // Finalize exactly once: mark the server cart completed (conversion) for a real
+  // order id, else just clear locally. completeOrder reads the live baseUrl itself.
+  const finalize = () => {
+    if (firedRef.current) return
+    firedRef.current = true
+    const orderId =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("oid")
+        : null
+    if (orderId) void completeOrder(orderId)
+    else clearCart()
+  }
 
   useEffect(() => {
-    clearCart()
     if (typeof window !== "undefined") {
       setOid(new URLSearchParams(window.location.search).get("oid"))
     }
+    // Fallback so the cart still clears even if DecantConfig never sets a baseUrl.
+    const t = setTimeout(finalize, 1500)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Prefer to finalize as soon as the base URL is known (so the /complete call works).
+  useEffect(() => {
+    if (config.baseUrl) finalize()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.baseUrl])
 
   // Custom design slotted in — just clear the cart and render it.
   if (children) return <>{children}</>

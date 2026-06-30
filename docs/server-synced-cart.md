@@ -110,10 +110,12 @@ per pack, so a line is `{productId, quantity, option}` not just `{productId, qty
   stepper, client-side subtotal) so the cart components are unchanged. Degrades to
   local-only when there's no baseUrl or a request fails. **NOTE: re-paste decant.ts
   into Framer to take effect.**
-- **Phase E — checkout completion.** ✓ `sessionKey` now rides the checkout URL
-  (`checkout()` sends it; `/api/checkout` appends `&sessionKey=`). **Remaining:** call
-  `/api/cart/complete` on the `CheckoutSuccess?oid=` return (cart `clearCart()` already
-  zeroes the server lines, but an explicit complete with the OrderId is cleaner).
+- **Phase E — checkout completion. ✓ DONE.** `sessionKey` rides the checkout URL
+  (`checkout()` sends it; `/api/checkout` appends `&sessionKey=`). `CheckoutSuccess`
+  now calls `completeOrder(oid)` → `POST /api/cart/complete {sessionKey, orderId}`
+  (marks the cart **completed**, a conversion vs abandoned), clears the local cart,
+  and rotates the session id for the next visit. Best-effort with a local-clear
+  fallback. **Whole plan complete** — re-paste decant.ts + CheckoutSuccess.tsx.
 - **Phase F — members (later).** Login + `/api/cart/merge` (anon→member).
 
 ## Open questions
