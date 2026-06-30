@@ -15,7 +15,7 @@ function str(form: FormData, key: string): string {
   return (form.get(key) ?? "").toString().trim()
 }
 
-export type ActionState = { error?: string; ok?: boolean }
+export type ActionState = { error?: string; ok?: boolean; message?: string }
 
 // ── Create ────────────────────────────────────────────────────────────────────
 
@@ -149,13 +149,24 @@ export async function updateScheduleAction(
 
 // ── Manual sync ───────────────────────────────────────────────────────────────
 
-export async function triggerSyncAction(form: FormData): Promise<void> {
+export async function syncNowAction(
+  _prev: ActionState,
+  form: FormData
+): Promise<ActionState> {
   const session = await requireUser()
   const id = str(form, "projectId")
   const project = await getProjectById(id)
-  if (!project) return
-  await executeSync(id, "manual", session.user.email ?? session.user.id)
+  if (!project) return { error: "Project not found." }
+
+  const outcome = await executeSync(id, "manual", session.user.email ?? session.user.id)
   revalidatePath(`/projects/${project.slug}`)
+
+  if (!outcome.ok) return { error: outcome.error ?? "Sync failed." }
+  const c = outcome.counts
+  const message = c
+    ? `Sync complete — ${c.added} added, ${c.updated} updated, ${c.deleted} deleted`
+    : "Sync complete"
+  return { ok: true, message }
 }
 
 // ── Collection mapping ────────────────────────────────────────────────────────

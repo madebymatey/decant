@@ -6,6 +6,7 @@ import { saveMappingAction, type ActionState } from "../actions"
 import type { CollectionMapping, FieldOverride, Project } from "@/db/schema"
 import { Card, CardBody, CardHeader, Field, Input } from "@/components/ui"
 import { SubmitButton } from "@/components/SubmitButton"
+import { useActionToast } from "@/components/Toast"
 
 const PRODUCT_REF_FIELDS = ["Wine Type", "Varietal", "Vintage", "Region"] as const
 
@@ -62,6 +63,7 @@ function ProductsMappingForm({
   mapping?: CollectionMapping
 }) {
   const [state, formAction] = useFormState(saveMappingAction, {} as ActionState)
+  useActionToast(state, { success: "Products mapping saved" })
   const initialOverrides = useMemo(() => {
     const map = new Map<string, FieldOverride>()
     for (const o of mapping?.fieldOverrides ?? []) map.set(o.field, o)
@@ -94,11 +96,6 @@ function ProductsMappingForm({
       </CardHeader>
       <form action={formAction}>
         <CardBody className="space-y-4">
-          {state.ok ? (
-            <div className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-[13px] text-success">
-              Saved.
-            </div>
-          ) : null}
           {state.error ? (
             <div className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-[13px] text-danger">
               {state.error}
@@ -166,6 +163,7 @@ function OptionMappingForm({
   defaultName: string
 }) {
   const [state, formAction] = useFormState(saveMappingAction, {} as ActionState)
+  useActionToast(state, { success: `${label} mapping saved` })
   return (
     <Card>
       <form action={formAction}>

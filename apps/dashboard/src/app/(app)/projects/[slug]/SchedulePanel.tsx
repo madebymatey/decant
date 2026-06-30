@@ -5,6 +5,7 @@ import { updateScheduleAction, type ActionState } from "../actions"
 import type { Project } from "@/db/schema"
 import { Card, CardBody, CardHeader, Field } from "@/components/ui"
 import { SubmitButton } from "@/components/SubmitButton"
+import { useActionToast } from "@/components/Toast"
 
 // The central scheduler runs once a day (see vercel.json cron), so daily is the
 // finest cadence that can actually be honoured. Add sub-daily options back here
@@ -19,6 +20,7 @@ const INTERVALS = [
 
 export function SchedulePanel({ project }: { project: Project }) {
   const [state, formAction] = useFormState(updateScheduleAction, {} as ActionState)
+  useActionToast(state, { success: "Schedule saved" })
 
   return (
     <Card>
@@ -31,11 +33,6 @@ export function SchedulePanel({ project }: { project: Project }) {
       </CardHeader>
       <form action={formAction}>
         <CardBody className="space-y-4">
-          {state.ok ? (
-            <div className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-[13px] text-success">
-              Schedule saved.
-            </div>
-          ) : null}
           {state.error ? (
             <div className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-[13px] text-danger">
               {state.error}

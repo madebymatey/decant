@@ -1,5 +1,5 @@
 import "server-only"
-import { and, desc, eq } from "drizzle-orm"
+import { and, desc, eq, gte } from "drizzle-orm"
 import { db } from "@/db"
 import {
   collectionMappings,
@@ -37,6 +37,15 @@ export async function listSyncRuns(projectId: string, limit = 10): Promise<SyncR
     .where(eq(syncRuns.projectId, projectId))
     .orderBy(desc(syncRuns.startedAt))
     .limit(limit)
+}
+
+/** Runs since `since`, oldest-first — for the activity chart on the Sync tab. */
+export async function listSyncRunsSince(projectId: string, since: Date): Promise<SyncRun[]> {
+  return db
+    .select()
+    .from(syncRuns)
+    .where(and(eq(syncRuns.projectId, projectId), gte(syncRuns.startedAt, since)))
+    .orderBy(syncRuns.startedAt)
 }
 
 export async function getMappings(projectId: string) {

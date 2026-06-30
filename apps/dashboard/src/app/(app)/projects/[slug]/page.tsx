@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/guards"
 import {
   getProjectBySlug,
   listSyncRuns,
+  listSyncRunsSince,
   getMappings,
   listSecretNames,
 } from "@/lib/projects"
@@ -39,8 +40,10 @@ export default async function ProjectPage({
 
   const tab: Tab = TABS.includes(searchParams.tab as Tab) ? (searchParams.tab as Tab) : "sync"
 
-  const [runs, mappings, secretsSet] = await Promise.all([
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  const [runs, activity, mappings, secretsSet] = await Promise.all([
     listSyncRuns(project.id, 12),
+    listSyncRunsSince(project.id, since),
     getMappings(project.id),
     listSecretNames(project.id),
   ])
@@ -93,7 +96,7 @@ export default async function ProjectPage({
         ))}
       </div>
 
-      {tab === "sync" && <SyncPanel project={project} runs={runs} />}
+      {tab === "sync" && <SyncPanel project={project} runs={runs} activity={activity} />}
       {tab === "deploy" && <DeployPanel project={project} vercelConfigured={vercelConfigured()} />}
       {tab === "schedule" && <SchedulePanel project={project} />}
       {tab === "feeds" && (

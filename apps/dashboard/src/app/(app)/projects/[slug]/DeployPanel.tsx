@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useFormState } from "react-dom"
 import { CheckCircle2, AlertCircle, Loader2, Rocket, ExternalLink, Copy, Check } from "lucide-react"
 import type { Project } from "@/db/schema"
@@ -12,6 +12,7 @@ import {
 import type { ActionState } from "../actions"
 import { Badge, Button, Card, CardBody, CardHeader, Field, Input } from "@/components/ui"
 import { SubmitButton } from "@/components/SubmitButton"
+import { useActionToast, useToast } from "@/components/Toast"
 
 type Status = "none" | "provisioning" | "ready" | "error"
 
@@ -27,11 +28,28 @@ export function DeployPanel({
   const [provisionState, provision] = useFormState(provisionAction, {} as ActionState)
   const [domainState, addDomain] = useFormState(addDomainAction, {} as DomainState)
   const [copied, setCopied] = useState(false)
+  const toast = useToast()
+  const deployed = status === "ready" || Boolean(project.vercelProjectId)
+
+  // Success toast when the deploy kicks off; errors stay inline below.
+  useActionToast(provisionState, {
+    success: deployed ? "Redeploy started — building…" : "Deployment started — building…",
+    error: false,
+  })
 
   // Optimistically flip to "provisioning" once the action succeeds.
   useEffect(() => {
     if (provisionState.ok) setStatus("provisioning")
   }, [provisionState.ok])
+
+  // Confirm a custom domain attach (this state carries `domain`, not `ok`).
+  const lastDomain = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (domainState.domain && domainState.domain !== lastDomain.current) {
+      lastDomain.current = domainState.domain
+      toast.success(`Domain added: ${domainState.domain}`, "Create the DNS record shown below.")
+    }
+  }, [domainState.domain, toast])
 
   // Live-poll while a deploy is building.
   useEffect(() => {
@@ -54,8 +72,6 @@ export function DeployPanel({
       clearInterval(interval)
     }
   }, [status, project.id])
-
-  const deployed = status === "ready" || Boolean(project.vercelProjectId)
 
   return (
     <div className="space-y-4">

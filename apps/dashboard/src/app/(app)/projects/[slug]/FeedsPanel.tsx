@@ -1,10 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { Check, Copy, Loader2 } from "lucide-react"
+import { Check, Copy } from "lucide-react"
 import { FEED_KINDS, FEED_META, type FeedKind } from "@/lib/feed-kinds"
 import type { Project } from "@/db/schema"
-import { Card } from "@/components/ui"
+import { Card, Skeleton } from "@/components/ui"
 import { cn } from "@/lib/cn"
 
 export function FeedsPanel({
@@ -132,10 +132,7 @@ export function FeedsPanel({
 
         <div className="px-5 py-4">
           {loading ? (
-            <div className="flex items-center gap-2 py-10 text-sm text-muted">
-              <Loader2 size={15} className="animate-[spin_0.7s_linear_infinite]" />
-              Fetching feed…
-            </div>
+            <FeedSkeleton />
           ) : error ? (
             <div className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-[13px] text-danger">
               {error}
@@ -184,6 +181,25 @@ function FeedTable({ rows }: { rows: Record<string, unknown>[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+function FeedSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-md border border-border">
+      <div className="flex gap-3 border-b border-border bg-surface px-3 py-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-3 w-24" />
+        ))}
+      </div>
+      {Array.from({ length: 6 }).map((_, r) => (
+        <div key={r} className="flex gap-3 border-b border-border px-3 py-2.5 last:border-0">
+          {Array.from({ length: 4 }).map((_, c) => (
+            <Skeleton key={c} className="h-3.5 w-24" style={{ opacity: 1 - r * 0.12 }} />
+          ))}
+        </div>
+      ))}
     </div>
   )
 }

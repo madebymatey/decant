@@ -153,6 +153,19 @@ export function Field({
   )
 }
 
+// ── Skeleton ─────────────────────────────────────────────────────────────────
+
+/** Pulsing placeholder block for loading states. Size it with className. */
+export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn("animate-pulse rounded-md bg-surface-hover", className)}
+      aria-hidden
+      {...props}
+    />
+  )
+}
+
 // ── Misc ─────────────────────────────────────────────────────────────────────
 
 export function EmptyState({

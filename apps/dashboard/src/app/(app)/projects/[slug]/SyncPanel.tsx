@@ -1,9 +1,9 @@
-import { AlertCircle, CheckCircle2, Loader2, RefreshCw } from "lucide-react"
+import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
 import type { Project, SyncRun } from "@/db/schema"
-import { triggerSyncAction } from "../actions"
-import { relativeTime, formatDateTime } from "@/lib/format"
+import { relativeTime } from "@/lib/format"
 import { Badge, Card } from "@/components/ui"
-import { SubmitButton } from "@/components/SubmitButton"
+import { SyncNowCard } from "./SyncNowCard"
+import { SyncActivityChart } from "./SyncActivityChart"
 
 function countsSummary(run: SyncRun): string {
   const c = run.counts
@@ -11,27 +11,21 @@ function countsSummary(run: SyncRun): string {
   return `${c.added}A · ${c.updated}U · ${c.deleted}D`
 }
 
-export function SyncPanel({ project, runs }: { project: Project; runs: SyncRun[] }) {
+export function SyncPanel({
+  project,
+  runs,
+  activity,
+}: {
+  project: Project
+  runs: SyncRun[]
+  activity: SyncRun[]
+}) {
   const lastSuccess = runs.find((r) => r.status === "success")
 
   return (
     <div className="space-y-4">
-      <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-medium">Manual sync</p>
-          <p className="mt-0.5 text-xs text-muted">
-            Last synced {relativeTime(project.lastSyncAt)}
-            {project.lastSyncAt ? ` · ${formatDateTime(project.lastSyncAt)}` : ""}
-          </p>
-        </div>
-        <form action={triggerSyncAction}>
-          <input type="hidden" name="projectId" value={project.id} />
-          <SubmitButton variant="primary" pendingLabel="Syncing…">
-            <RefreshCw size={15} />
-            Sync now
-          </SubmitButton>
-        </form>
-      </Card>
+      <SyncActivityChart activity={activity} />
+      <SyncNowCard project={project} />
 
       {lastSuccess?.counts ? (
         <div className="grid grid-cols-3 gap-3">

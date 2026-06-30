@@ -5,11 +5,13 @@ import { useFormState, useFormStatus } from "react-dom"
 import { createProjectAction, type ActionState } from "../actions"
 import { toSlug } from "@/lib/slug"
 import { Button, Card, CardBody, CardHeader, Field, Input } from "@/components/ui"
+import { useActionToast } from "@/components/Toast"
 
 const initial: ActionState = {}
 
 export function NewProjectForm() {
   const [state, formAction] = useFormState(createProjectAction, initial)
+  useActionToast(state)
   const [name, setName] = useState("")
   const [slug, setSlug] = useState("")
   const [slugEdited, setSlugEdited] = useState(false)
