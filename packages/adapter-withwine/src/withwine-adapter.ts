@@ -23,6 +23,8 @@ import { WwProductListResponseSchema } from "./schemas/product.schema"
 
 const PLATFORM = "withwine"
 const DEFAULT_BASE_URL = "https://secure.withwine.com"
+/** Per-request network timeout so a wrong apiUrl fails fast, not after 55s. */
+const REQUEST_TIMEOUT_MS = 20_000
 
 /**
  * Adapter for the WithWine platform.
@@ -250,6 +252,7 @@ export class WithWineAdapter implements PlatformAdapter {
           ...this.authHeaders(withBody),
           ...normalizeHeaders(init?.headers),
         },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       })
       const text = await res.text()
       if (res.status === 404) {
@@ -285,7 +288,12 @@ export class WithWineAdapter implements PlatformAdapter {
       if (e instanceof PlatformError) {
         throw e
       }
-      const message = e instanceof Error ? e.message : "Network error"
+      const isTimeout = e instanceof DOMException && e.name === "TimeoutError"
+      const message = isTimeout
+        ? `WithWine request timed out after ${REQUEST_TIMEOUT_MS / 1000}s — check apiUrl and credentials.`
+        : e instanceof Error
+          ? e.message
+          : "Network error"
       throw new PlatformError(ErrorCode.NETWORK_ERROR, message, PLATFORM)
     }
   }

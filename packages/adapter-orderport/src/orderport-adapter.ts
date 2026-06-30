@@ -20,6 +20,9 @@ import {
   OpProductSchema,
 } from "./schemas/product.schema"
 
+/** Per-request network timeout so a wrong apiUrl fails fast, not after 55s. */
+const REQUEST_TIMEOUT_MS = 20_000
+
 export class OrderPortAdapter implements PlatformAdapter {
   constructor(private readonly config: Config) {
     if (config.platform !== "orderport") {
@@ -154,6 +157,7 @@ export class OrderPortAdapter implements PlatformAdapter {
           ...this.authHeaders(withBody),
           ...normalizeHeaders(init?.headers),
         },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       })
       const text = await res.text()
       if (res.status === 404) {
@@ -189,7 +193,12 @@ export class OrderPortAdapter implements PlatformAdapter {
       if (e instanceof PlatformError) {
         throw e
       }
-      const message = e instanceof Error ? e.message : "Network error"
+      const isTimeout = e instanceof DOMException && e.name === "TimeoutError"
+      const message = isTimeout
+        ? `OrderPort request timed out after ${REQUEST_TIMEOUT_MS / 1000}s — check apiUrl and credentials.`
+        : e instanceof Error
+          ? e.message
+          : "Network error"
       throw new PlatformError(ErrorCode.NETWORK_ERROR, message, "orderport")
     }
   }
