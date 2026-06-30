@@ -47,4 +47,61 @@ describe("Commerce7Adapter", () => {
     expect(products[0]?.id).toBe("1")
     expect(products[0]?.price).toBe(25)
   })
+
+  it("maps the standardized wine block, compareAtPrice and availability", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          text: () =>
+            Promise.resolve(
+              JSON.stringify({
+                products: [
+                  {
+                    id: "2",
+                    title: "Estate Cabernet",
+                    slug: "estate-cab",
+                    webStatus: "Available",
+                    variants: [{ price: 6500, comparePrice: 8000 }],
+                    wine: {
+                      type: "Red",
+                      varietal: "Cabernet Sauvignon",
+                      vintage: 2019,
+                      region: "Napa Valley",
+                      appellation: "Oakville",
+                      countryCode: "US",
+                    },
+                  },
+                ],
+                cursor: null,
+              })
+            ),
+        } as Response)
+      )
+    )
+    const adapter = new Commerce7Adapter(
+      defineConfig({
+        platform: "commerce7",
+        storeId: "tenant",
+        apiKey: "app:secret",
+        apiUrl: "https://c7.example.com",
+        currency: "USD",
+      })
+    )
+    const [product] = await adapter.getProducts()
+    expect(product?.wine).toEqual({
+      type: "Red",
+      varietal: "Cabernet Sauvignon",
+      vintage: 2019,
+      region: "Napa Valley",
+      appellation: "Oakville",
+      countryCode: "US",
+    })
+    expect(product?.price).toBe(65)
+    expect(product?.compareAtPrice).toBe(80)
+    expect(product?.available).toBe(true)
+    expect(product?.slug).toBe("estate-cab")
+  })
 })
