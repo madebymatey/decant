@@ -3,6 +3,7 @@ import { parseBearerToken, slugify } from "@decant/framer"
 import { WINE_TYPE_OPTIONS } from "@decant/adapter-withwine"
 import { getCatalogProducts } from "../../../lib/catalog"
 import { sendPlatformError } from "../../../lib/respond"
+import { resolvedConfig } from "../../../storefront.config"
 
 /**
  * GET /api/feed/wine-types -> flat JSON array of wineType values for a "Wine
@@ -64,8 +65,11 @@ export default async function handler(
       if (!labelBySlug.has(slug)) labelBySlug.set(slug, name)
     }
 
-    // Base set of names: full taxonomy (all=true) or only those present.
-    const names = all ? WINE_TYPE_OPTIONS : [...labelBySlug.values()]
+    // Base set of names: only those present in the catalog, or — for WithWine,
+    // which ships a static taxonomy — the full option list when ?all=true.
+    // Other platforms derive options from the catalog regardless of ?all.
+    const useFullTaxonomy = all && resolvedConfig.platform === "withwine"
+    const names = useFullTaxonomy ? WINE_TYPE_OPTIONS : [...labelBySlug.values()]
     const seen = new Set<string>()
     const records = names
       .map((name) => {

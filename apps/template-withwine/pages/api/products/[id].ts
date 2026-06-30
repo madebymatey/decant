@@ -3,7 +3,7 @@ import { parseFieldsParam, pickFields, toFramerProduct } from "@decant/framer"
 import { getCatalogProduct } from "../../../lib/catalog"
 import { protectApi } from "../../../lib/protect"
 import { sendPlatformError } from "../../../lib/respond"
-import { resolvedConfig } from "../../../withwine.config"
+import { resolvedConfig } from "../../../storefront.config"
 
 /**
  * GET /api/products/:id -> single Framer-ready product. Origin + token protected.

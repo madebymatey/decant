@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { protectApi } from "../../lib/protect"
-import { resolvedConfig } from "../../withwine.config"
+import { resolvedConfig } from "../../storefront.config"
 
 type CartLine = { id: string | number; quantity: number }
 

@@ -9,7 +9,7 @@ import {
 } from "framer-api"
 import { slugify, toCmsRecords, toFramerProducts } from "@decant/framer"
 import { getCatalogProducts } from "../catalog"
-import { resolvedConfig } from "../../withwine.config"
+import { resolvedConfig } from "../../storefront.config"
 
 /**
  * Headless CMS sync via Framer's Server API (`framer-api`).

@@ -3,6 +3,7 @@ import { protectApi } from "../../../lib/protect"
 import { adapter } from "../../../lib/adapter"
 import { isDemoMode } from "../../../lib/catalog"
 import { sendPlatformError } from "../../../lib/respond"
+import { resolvedConfig } from "../../../storefront.config"
 
 /**
  * POST /api/cart/complete — mark the session's cart completed after an order.
@@ -24,6 +25,12 @@ export default protectApi(
     }
     if (isDemoMode()) {
       res.status(200).json({ ok: true })
+      return
+    }
+    // Platforms without a discrete cart-complete step (completion handled by
+    // createOrder) simply omit this — treat it as a no-op success.
+    if (!adapter.completeCart) {
+      res.status(200).json({ ok: true, skipped: resolvedConfig.platform })
       return
     }
     try {

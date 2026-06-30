@@ -10,6 +10,8 @@
     "lint": "echo \"no lint\""
   },
   "dependencies": {
+    "@decant/adapter-commerce7": "workspace:*",
+    "@decant/adapter-orderport": "workspace:*",
     "@decant/adapter-withwine": "workspace:*",
     "@decant/core": "workspace:*",
     "@decant/framer": "workspace:*",

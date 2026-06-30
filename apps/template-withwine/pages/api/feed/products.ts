@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next"
 import { parseBearerToken, toCmsRecords, toFramerProducts } from "@decant/framer"
 import { getCatalogProducts } from "../../../lib/catalog"
 import { sendPlatformError } from "../../../lib/respond"
-import { resolvedConfig } from "../../../withwine.config"
+import { resolvedConfig } from "../../../storefront.config"
 
 /**
  * GET /api/feed/products -> flat JSON array of products for an external CMS sync

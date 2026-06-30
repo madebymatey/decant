@@ -3,7 +3,7 @@ import { protectApi } from "../../../lib/protect"
 import { adapter } from "../../../lib/adapter"
 import { isDemoMode } from "../../../lib/catalog"
 import { sendPlatformError } from "../../../lib/respond"
-import { resolvedConfig } from "../../../withwine.config"
+import { resolvedConfig } from "../../../storefront.config"
 
 /**
  * GET /api/cart?sessionKey=<id> — the anonymous server-synced cart.

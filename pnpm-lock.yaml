@@ -124,6 +124,12 @@ importers:
 
   apps/template-withwine:
     dependencies:
+      '@decant/adapter-commerce7':
+        specifier: workspace:*
+        version: link:../../packages/adapter-commerce7
+      '@decant/adapter-orderport':
+        specifier: workspace:*
+        version: link:../../packages/adapter-orderport
       '@decant/adapter-withwine':
         specifier: workspace:*
         version: link:../../packages/adapter-withwine

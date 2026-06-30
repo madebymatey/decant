@@ -4,7 +4,7 @@ import { protectApi } from "../../../lib/protect"
 import { adapter } from "../../../lib/adapter"
 import { isDemoMode } from "../../../lib/catalog"
 import { sendPlatformError } from "../../../lib/respond"
-import { resolvedConfig } from "../../../withwine.config"
+import { resolvedConfig } from "../../../storefront.config"
 
 /**
  * POST /api/cart/price — live totals/tax/shipping for a set of lines.
@@ -33,6 +33,15 @@ export default protectApi(
         shipping: 0,
         isFreeShipping: false,
         errors: [],
+      })
+      return
+    }
+    if (!adapter.priceCart) {
+      res.status(501).json({
+        error: {
+          code: "NOT_IMPLEMENTED",
+          message: `Live pricing is not supported for platform "${resolvedConfig.platform}".`,
+        },
       })
       return
     }
