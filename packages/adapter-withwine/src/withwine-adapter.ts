@@ -157,7 +157,13 @@ export class WithWineAdapter implements PlatformAdapter {
     return mapWwPriceToTotals(data, this.config.currency)
   }
 
-  /** POST /api/cart/complete — mark the session's cart completed after an order. */
+  /**
+   * POST /api/cart/complete — mark the session's cart completed after an order.
+   *
+   * Optional fallback: WithWine already auto-completes and clears the cart when
+   * the checkout link carries `sessionKey={UnauthenticatedSessionId}` (confirmed
+   * by WithWine's CTO, 2026-06-30). Kept as a belt-and-suspenders manual path.
+   */
   async completeCart(sessionKey: string, orderId: string): Promise<void> {
     await this.requestJson("POST", `/api/cart/complete`, {
       body: JSON.stringify({
